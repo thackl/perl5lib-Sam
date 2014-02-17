@@ -669,7 +669,6 @@ sub new{
 		bin_size => $BinSize,
 		bin_max_bases => $BinSize * $MaxCoverage,
 		phred_offset => $PhredOffset,
-		max_coverage => 50,
 		is => undef,
 		## custom overwrites
 		@_,
