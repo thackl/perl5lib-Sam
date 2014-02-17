@@ -896,7 +896,7 @@ By default the state matrix is calculated, wether or not it has
 sub variants{
 	my ($self, $reuse_matrix) = (@_,0);
 	# compute state_matrix if required/wanted
-	unless($self->{_state_matrix} || !$reuse_matrix){
+	unless(@{$self->{_state_matrix}} || $reuse_matrix){
 		$self->_init_state_matrix();
 	}
 	
@@ -917,7 +917,7 @@ sub coverage{
 	# calculate from _state_matrix, not the fastest way but accurate and
 	#  already implemented :)
 	# compute state_matrix if required/wanted
-	unless($self->{_state_matrix} || !$reuse_matrix){
+	unless(@{$self->{_state_matrix}} || $reuse_matrix){
 		$self->_init_state_matrix();
 	}
 
@@ -945,7 +945,7 @@ By default the state matrix is calculated, wether or not it has
 sub chimera{
 	my ($self, $reuse_matrix) = (@_,0);
 	# compute state_matrix if required/wanted
-	$self->_init_state_matrix() unless ($self->{_state_matrix} || !$reuse_matrix);
+	$self->_init_state_matrix() unless (@{$self->{_state_matrix}} || $reuse_matrix);
 
 	my @bin_bases = @{$self->{_bin_bases}};
 	return unless @bin_bases > 20; # need at least 20 bins to make sense
