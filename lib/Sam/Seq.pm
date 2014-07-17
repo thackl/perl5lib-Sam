@@ -578,6 +578,9 @@ sub State_matrix{
 					$states[0] = substr($seq,$qpos,$cigar[$i]);		
 				}
 				$qpos += $cigar[$i];
+			}elsif($cigar[$i+1] eq 'S'){
+			    # just move on in query, do nothing else
+			    $qpos += $cigar[$i];
 			}else{
 				$V->exit("Unknown Cigar '".$cigar[$i+1]."'");
 			}
