@@ -5,12 +5,10 @@ use strict;
 
 # $Id$
 
-use overload '""' => \&raw;
+use overload '""' => \&string;
 
 # preference libs in same folder over @INC
 use lib '../';
-
-
 
 our $VERSION = '0.08';
 our ($REVISION) = '$Revision$' =~ /(\d+)/;
@@ -125,6 +123,9 @@ Initial Alignment module. Provides Constructor, generic accessor
 =cut
 
 
+# alias for backward comp.
+*raw = \&string;
+
 =head1 Class ATTRIBUTES
 
 =cut
@@ -158,7 +159,6 @@ sub new{
 		my %sam;
 		@sam{@Sam::Alignment::_Fieldsnames} = split("\t",$sam, 12); 
 		$self = \%sam;
-		$self->{raw} = $sam."\n";
 	}else{ # input is key -> hash structure
 		$self = {
 			qname => undef,
@@ -176,13 +176,6 @@ sub new{
 			@_,
 			_opt => undef
 		};
-		if($self->{raw}){
-			$self->{raw}.= "\n" unless $self->{raw} =~ /\n$/; # just to be safe, make it have one newline.
-		}else{
-			$self->{raw} = join("\t", @$self{qw(qname flag rname pos mapq cigar rnext pnext tlen seq qual)});
-			$self->{raw}.= "\t".$self->{opt} if $self->{opt};
-			$self->{raw}.="\n";
-		}
 	}
 	# overwrite defaults
 	
@@ -369,7 +362,6 @@ sub qname{
 	my ($self, $qname, $force) = @_;
         if(defined $qname || $force){
             $self->{qname} = $qname;
-            $self->raw(,1); # reset
         }
 	return $self->{qname};
 }
@@ -384,7 +376,6 @@ sub flag{
 	my ($self, $flag, $force) = @_;
         if(defined $flag || $force){
             $self->{flag} = $flag;
-            $self->raw(,1); # reset
         }
 	return $self->{flag};
 }
@@ -399,7 +390,6 @@ sub rname{
 	my ($self, $rname, $force) = @_;
         if(defined $rname || $force){
             $self->{rname} = $rname;
-            $self->raw(,1); # reset
         }
 	return $self->{rname};
 }
@@ -414,7 +404,6 @@ sub pos{
 	my ($self, $pos, $force) = @_;
         if(defined $pos || $force){
             $self->{pos} = $pos;
-            $self->raw(,1); # reset
         }
 	return $self->{pos};
 }
@@ -429,7 +418,6 @@ sub mapq{
 	my ($self, $mapq, $force) = @_;
         if(defined $mapq || $force){
             $self->{mapq} = $mapq;
-            $self->raw(,1); # reset
         }
 	return $self->{mapq};
 }
@@ -444,7 +432,6 @@ sub cigar{
 	my ($self, $cigar, $force) = @_;
         if(defined $cigar || $force){
             $self->{cigar} = $cigar;
-            $self->raw(,1); # reset
         }
 	return $self->{cigar};
 }
@@ -459,7 +446,6 @@ sub rnext{
 	my ($self, $rnext, $force) = @_;
         if(defined $rnext || $force){
             $self->{rnext} = $rnext;
-            $self->raw(,1); # reset
         }
 	return $self->{rnext};
 }
@@ -474,7 +460,6 @@ sub pnext{
 	my ($self, $pnext, $force) = @_;
         if(defined $pnext || $force){
             $self->{pnext} = $pnext;
-            $self->raw(,1); # reset
         }
 	return $self->{pnext};
 }
@@ -489,7 +474,6 @@ sub tlen{
 	my ($self, $tlen, $force) = @_;
         if(defined $tlen || $force){
             $self->{tlen} = $tlen;
-            $self->raw(,1); # reset
         }
 	return $self->{tlen};
 }
@@ -504,7 +488,6 @@ sub seq{
 	my ($self, $seq, $force) = @_;
         if(defined $seq || $force){
             $self->{seq} = $seq;
-            $self->raw(,1); # reset
         }
 	return $self->{seq};
 }
@@ -519,12 +502,27 @@ sub qual{
 	my ($self, $qual, $force) = @_;
         if(defined $qual || $force){
             $self->{qual} = $qual;
-            $self->raw(,1); # reset
         }
 	return $self->{qual};
 }
 
+
+=head2 string
+
+Get stringified alignment.
+
+=cut
+
+sub string{
+    my ($self) = @_;
+    my $s = join("\t", @$self{qw(qname flag rname pos mapq cigar rnext pnext tlen seq qual)});
+    $s.= "\t".$self->{opt} if $self->{opt};
+    return $s."\n";
+}
+
 =head2 raw
+
+DEPRECATED, aliased to string() for backward compatibility.
 
 Get/Set the raw line. 
 
@@ -532,22 +530,20 @@ NOTE: Following v0.04, inludes trailing newline.
 
 =cut
 
-sub raw{
-	my ($self, $raw, $force) = @_;
-	if(defined $raw || $force){ # guarantee newline
-            $self->{raw} = $raw =~ /\n$/ ? $raw : $raw."\n";
-	}
+# sub raw{
+# 	my ($self, $raw, $force) = @_;
+# 	if(defined $raw || $force){ # guarantee newline
+#             $self->{raw} = $raw =~ /\n$/ ? $raw : $raw."\n";
+# 	}
 	
-	# {raw} is reset if any other value is changed and will be generated 
-	# if required
-	unless($self->{raw}){
-		$self->{raw} = join("\t", @$self{qw(qname flag rname pos mapq cigar rnext pnext tlen seq qual)});
-		$self->{raw}.= "\t".$self->{opt} if $self->{opt};
-		$self->{raw}.="\n";
-	}
+# 	# {raw} is reset if any other value is changed and will be generated 
+# 	# if required
+# 	unless($self->{raw}){
+# 	}
 	
-	return $self->{raw};
-}
+# 	return $self->{raw};
+# }
+
 
 =head2 opt
 
@@ -570,8 +566,6 @@ sub opt{
 	my ($self, $tag, $type, $value) = @_;
 	# set
 	if($type){
-		# reset raw, is regenerated with updated opt if required		
-		$self->{raw} = undef;
 		
 		# make sure, opt has been parsed, so it can be overwritten
 		unless ($self->{_opt}){
