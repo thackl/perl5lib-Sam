@@ -12,7 +12,7 @@ use lib '../';
 
 
 
-our $VERSION = '0.07';
+our $VERSION = '0.08';
 our ($REVISION) = '$Revision$' =~ /(\d+)/;
 our ($MODIFIED) = '$Date$' =~ /Date: (\S+\s\S+)/;
 
@@ -366,8 +366,11 @@ Get/Set the qname.
 =cut
 
 sub qname{
-	my ($self, $qname) = @_;
-	$self->{qname} = $qname if $qname;
+	my ($self, $qname, $force) = @_;
+        if(defined $qname || $force){
+            $self->{qname} = $qname;
+            $self->raw(,1); # reset
+        }
 	return $self->{qname};
 }
 
@@ -378,8 +381,11 @@ Get/Set the flag.
 =cut
 
 sub flag{
-	my ($self, $flag) = @_;
-	$self->{flag} = $flag if defined ($flag);
+	my ($self, $flag, $force) = @_;
+        if(defined $flag || $force){
+            $self->{flag} = $flag;
+            $self->raw(,1); # reset
+        }
 	return $self->{flag};
 }
 
@@ -390,8 +396,11 @@ Get/Set the rname.
 =cut
 
 sub rname{
-	my ($self, $rname) = @_;
-	$self->{rname} = $rname if $rname;
+	my ($self, $rname, $force) = @_;
+        if(defined $rname || $force){
+            $self->{rname} = $rname;
+            $self->raw(,1); # reset
+        }
 	return $self->{rname};
 }
 
@@ -402,8 +411,11 @@ Get/Set the pos.
 =cut
 
 sub pos{
-	my ($self, $pos) = @_;
-	$self->{pos} = $pos if $pos;
+	my ($self, $pos, $force) = @_;
+        if(defined $pos || $force){
+            $self->{pos} = $pos;
+            $self->raw(,1); # reset
+        }
 	return $self->{pos};
 }
 
@@ -414,8 +426,11 @@ Get/Set the mapq.
 =cut
 
 sub mapq{
-	my ($self, $mapq) = @_;
-	$self->{mapq} = $mapq if $mapq;
+	my ($self, $mapq, $force) = @_;
+        if(defined $mapq || $force){
+            $self->{mapq} = $mapq;
+            $self->raw(,1); # reset
+        }
 	return $self->{mapq};
 }
 
@@ -426,8 +441,11 @@ Get/Set the cigar.
 =cut
 
 sub cigar{
-	my ($self, $cigar) = @_;
-	$self->{cigar} = $cigar if $cigar;
+	my ($self, $cigar, $force) = @_;
+        if(defined $cigar || $force){
+            $self->{cigar} = $cigar;
+            $self->raw(,1); # reset
+        }
 	return $self->{cigar};
 }
 
@@ -438,8 +456,11 @@ Get/Set the rnext.
 =cut
 
 sub rnext{
-	my ($self, $rnext) = @_;
-	$self->{rnext} = $rnext if $rnext;
+	my ($self, $rnext, $force) = @_;
+        if(defined $rnext || $force){
+            $self->{rnext} = $rnext;
+            $self->raw(,1); # reset
+        }
 	return $self->{rnext};
 }
 
@@ -450,8 +471,11 @@ Get/Set the pnext.
 =cut
 
 sub pnext{
-	my ($self, $pnext) = @_;
-	$self->{pnext} = $pnext if $pnext;
+	my ($self, $pnext, $force) = @_;
+        if(defined $pnext || $force){
+            $self->{pnext} = $pnext;
+            $self->raw(,1); # reset
+        }
 	return $self->{pnext};
 }
 
@@ -462,8 +486,11 @@ Get/Set the tlen.
 =cut
 
 sub tlen{
-	my ($self, $tlen) = @_;
-	$self->{tlen} = $tlen if $tlen;
+	my ($self, $tlen, $force) = @_;
+        if(defined $tlen || $force){
+            $self->{tlen} = $tlen;
+            $self->raw(,1); # reset
+        }
 	return $self->{tlen};
 }
 
@@ -474,8 +501,11 @@ Get/Set the seq.
 =cut
 
 sub seq{
-	my ($self, $seq) = @_;
-	$self->{seq} = $seq if $seq;
+	my ($self, $seq, $force) = @_;
+        if(defined $seq || $force){
+            $self->{seq} = $seq;
+            $self->raw(,1); # reset
+        }
 	return $self->{seq};
 }
 
@@ -486,8 +516,11 @@ Get/Set the seq.
 =cut
 
 sub qual{
-	my ($self, $qual) = @_;
-	$self->{qual} = $qual if $qual;
+	my ($self, $qual, $force) = @_;
+        if(defined $qual || $force){
+            $self->{qual} = $qual;
+            $self->raw(,1); # reset
+        }
 	return $self->{qual};
 }
 
@@ -500,9 +533,9 @@ NOTE: Following v0.04, inludes trailing newline.
 =cut
 
 sub raw{
-	my ($self, $raw) = @_;
-	if($raw){ # guarantee newline
-		$self->{raw} = $raw =~ /\n$/ ? $raw : $raw."\n";
+	my ($self, $raw, $force) = @_;
+	if(defined $raw || $force){ # guarantee newline
+            $self->{raw} = $raw =~ /\n$/ ? $raw : $raw."\n";
 	}
 	
 	# {raw} is reset if any other value is changed and will be generated 
