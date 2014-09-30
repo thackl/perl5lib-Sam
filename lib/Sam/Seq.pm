@@ -18,6 +18,11 @@ use Sam::Alignment ':flags';
 use Fastq::Seq;
 use Fasta::Seq;
 
+use constant {
+    # :) scaling constant for frequency to phred conversion. The higher
+    # the value, the more trust is put into frequency (proovread-1.01: 50)
+    PROOVREAD_CONSTANT => 120
+};
 
 our $VERSION = '0.11';
 
@@ -240,16 +245,18 @@ Default 0, which deactivates the feature.
 
 our $MaxInsLength = 0;
 
-=head2 %Freqs2phreds
 
-=cut
-
-our %Freqs2phreds;
-@Freqs2phreds{0..31} = (map{int((($_/50)**(1/2)*50)+0.5)}(0..39));
-@Freqs2phreds{32..100} = (40)x69;
-
-
-our %Phreds2freqs = reverse %Freqs2phreds;
+# DEPRECATED
+#=head2 %Freqs2phreds
+#
+#p = sqrt(f*120);
+#
+#=cut
+#
+# our %Freqs2phreds;
+# @Freqs2phreds{0..31} = (map{int((($_/50)**(1/2)*50)+0.5)}(0..39));
+# @Freqs2phreds{32..100} = (40)x69;
+# our %Phreds2freqs = reverse  %Freqs2phreds;
 
 =head1 Class METHODS
 
@@ -330,31 +337,28 @@ sub MaxInsLength{
 
 =head2 Freqs2phreds
 
-Convert a LIST of frequencies to a LIST of phreds based on precomputed values
- from 
+Convert a LIST of frequencies to a LIST of phreds.
 
 =cut
 
 sub Freqs2phreds{
 	my $class = shift;
 	return map{
-		$_ = 100 if $_> 100;
-		$Freqs2phreds{int($_)};
-	}@_;
+            int( sqrt( $_ * PROOVREAD_CONSTANT ) +.5);
+        }@_;
 }
 
 
 =head2 Phreds2freqs
 
-Convert a LIST of Phreds to a LIST of frequencies based on precomputed values.
+Convert a LIST of Phreds to a LIST of frequencies.
 
 =cut
 
 sub Phreds2freqs{
 	my $class = shift;
 	return map{
-		$_ = 40 if $_> 40;
-		$Phreds2freqs{int($_)};
+            int((( $_**2 / PROOVREAD_CONSTANT ) * 100)+ .5) /100
 	}@_;
 }
 
