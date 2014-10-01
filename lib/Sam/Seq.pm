@@ -344,7 +344,8 @@ Convert a LIST of frequencies to a LIST of phreds.
 sub Freqs2phreds{
 	my $class = shift;
 	return map{
-            int( sqrt( $_ * PROOVREAD_CONSTANT ) +.5);
+            my $p = int( sqrt( $_ * PROOVREAD_CONSTANT ) +.5);
+            $p > 40 ? 40 : $p;
         }@_;
 }
 
