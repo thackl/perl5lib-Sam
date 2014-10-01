@@ -398,10 +398,22 @@ Compress a trace string (MMMDMMIIMMDMM) to a cigar string (3M1D2M2I2M1D2M)
 
 sub Trace2cigar{
 	my ($class, $trace) = @_;
-	my $cigar = '';
-	while($trace =~ m/(\w)(\g{1}*)/g){
-		$cigar .= length($1.$2).$1;
-	}
+        chomp($trace); # just to be safe
+
+	my $cigar = '';        
+        my $spos = 0;
+
+        while($trace =~ /(\w)(?!\g{1})/g){
+            $cigar.= pos($trace)-$spos.$1;
+            $spos = pos($trace);
+        }
+
+        # DEPRECATED: cannot handle submatches >32k as the entire
+        # submatch is captured
+        #	while($trace =~ m/(\w)(\g{1}*)/g){
+        #		$cigar .= length($1.$2).$1;
+        #	}
+        
 	return $cigar;
 }
 
