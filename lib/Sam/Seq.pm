@@ -24,7 +24,7 @@ use constant {
     PROOVREAD_CONSTANT => 120
 };
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
 
 
@@ -362,6 +362,19 @@ sub Phreds2freqs{
 	}@_;
 }
 
+
+=head2 Qual2phreds                                                                                                                                                     
+
+Return the phred values of the quality string accorting to specified offset.
+
+=cut                                                                                      
+
+sub Qual2phreds{
+    my $class = shift;
+    return map{$_-=$PhredOffset}unpack("W*", $_[0]);
+}
+
+
 =head2 Hx
 
 Takes a reference to an ARRAY of counts, converts the counts to probabilities
@@ -423,15 +436,18 @@ sub Trace2cigar{
 =cut
 
 sub State_matrix{
+        my $self = shift;
 	my %p = (
-		alns => undef,
-		'length' => undef,
-		states => {},
+		alns => [$self->alns],
+		'length' => $self->len,
+		states => $self->{_states},
 		matrix => undef,
                 ignore_coords => undef,
+                qual_weighted => 0,
+                use_ref_qual => 0,
 		@_
 	);
-	
+
 	die unless defined ($p{alns} and $p{'length'}) || $p{matrix};
 	
 	# state matrix
@@ -441,13 +457,26 @@ sub State_matrix{
 	
 	# predefined states
 	my %states = %{$p{states}};
-        
+
+        # add ref to state matrix
+        if($p{use_ref_qual} && $self->ref){
+            my @seq = split (//, $self->ref->seq);
+            my @freqs = Sam::Seq->Phreds2freqs($self->ref->phreds);
+            
+            for(my $i=0; $i<@seq; $i++){
+                # never add 0, if nothing more matches, a 0 count might be introduced
+                next unless $freqs[$i];
+                ($S[$i][$self->{_states}{$seq[$i]}])+= $freqs[$i];
+            }
+        }
+
         foreach my $aln (@{$p{alns}}){
 		
 		###################
 		### prepare aln ###
 		# get read seq
 		my $seq = $aln->seq;
+                my $qua = $aln->qual;
 		my $orig_seq_length = length($seq);
 		
 		next unless $orig_seq_length > 50;
@@ -465,7 +494,7 @@ sub State_matrix{
 			##################
 			### InDelTaboo ###
 			# this also removes leading/trailing InDels regardless of InDelTaboo
-			# trim head
+                    # trim head
 			my $mc = 0;
 			my $dc = 0;
 			my $ic = 0;
@@ -532,50 +561,77 @@ sub State_matrix{
 		#######################
 		### cigar to states ###
 		my @states;
+                my @squals;
 		
 		# cigar counter, increment by 2 to capture count and type of cigar (10,M) (3,I) (5,D) ...
 		
 		my $qpos = 0;
-		for(my $i=0; $i<@cigar;$i+=2){
-			if($cigar[$i+1] eq 'M'){
-				push @states, split(//,substr($seq,$qpos,$cigar[$i]));
-				$qpos += $cigar[$i];
-			}elsif($cigar[$i+1] eq 'D'){
-				push @states, ('-') x $cigar[$i];
-			}elsif($cigar[$i+1] eq 'I'){
-				if($i){
-					# append to prev state
-					if($states[$#states] eq '-'){
-						# some mappers, e.g. bowtie2 produce 1D1I instead of 
-						# mismatchas (1M), as it is cheaper. This needs to be 
-						# corrected to a MM
-						$states[$#states] = substr($seq,$qpos,$cigar[$i]);
-					}else{
-						$states[$#states] .= substr($seq,$qpos,$cigar[$i]);
-					}	
-				}else{
-					$states[0] = substr($seq,$qpos,$cigar[$i]);		
-				}
-				$qpos += $cigar[$i];
-			}else{
-				$V->exit("Unknown Cigar '".$cigar[$i+1]."'");
-			}
+		for (my $i=0; $i<@cigar;$i+=2) {
+                    if ($cigar[$i+1] eq 'M') {
+                        push @states, split(//,substr($seq,$qpos,$cigar[$i]));
+                        push @squals, split(//,substr($qua,$qpos,$cigar[$i])) if $p{qual_weighted};
+                        $qpos += $cigar[$i];
+                    } elsif ($cigar[$i+1] eq 'D') {
+                        push @states, ('-') x $cigar[$i];
+                        if($p{qual_weighted}){
+                            my $qbefore = $qpos > 1 ? substr($qua,$qpos-1,1) : substr($qua,$qpos,1);
+                            my $qafter  = $qpos < length($qua) ? substr($qua,$qpos,1) : substr($qua,$qpos-1,1);
+                            my $q = $qbefore lt $qafter ? $qbefore : $qafter;
+                            push @squals, ($q) x $cigar[$i];
+                        };
+                    } elsif ($cigar[$i+1] eq 'I') {
+                        if ($i) {
+                            # append to prev state
+                            if ($states[$#states] eq '-') {
+                                # some mappers, e.g. bowtie2 produce 1D1I instead of 
+                                # mismatchas (1M), as it is cheaper. This needs to be 
+                                # corrected to a MM
+                                $states[$#states] = substr($seq,$qpos,$cigar[$i]);
+                                $squals[$#states] = substr($qua,$qpos,$cigar[$i]) if $p{qual_weighted};
+
+                            } else {
+                                $states[$#states] .= substr($seq,$qpos,$cigar[$i]);
+                                $squals[$#states] .= substr($qua,$qpos,$cigar[$i]) if $p{qual_weighted};
+                            }	
+                        } else {
+                            $states[0] = substr($seq,$qpos,$cigar[$i]);
+                            $squals[0] = substr($qua,$qpos,$cigar[$i]) if $p{qual_weighted};
+                        }
+                        $qpos += $cigar[$i];
+                    }elsif($cigar[$i+1] eq 'S'){
+                        # just move on in query, do nothing else
+                        $qpos += $cigar[$i];
+                    } else {
+                        $V->exit("Unknown Cigar '".$cigar[$i+1]."'");
+                    }
 		}
 		
 		
 		########################
 		### states to matrix ###
 		
-		foreach my $state (@states){
-                    if($p{ignore_coords} && _is_in_range($rpos, $p{ignore_coords})){
+		for(my $i=0; $i<@states; $i++) {
+                    if ($p{ignore_coords} && _is_in_range($rpos, $p{ignore_coords})) {
                         $rpos++;
                         next;
                     }
-                    
-                    if (length ($state) > 1 && ! exists $states{$state}){
+
+                    my $state = $states[$i];
+
+                    if (length ($state) > 1 && ! exists $states{$state}) {
                         $states{$state} = scalar keys %states; 
-                    }		
-                    ($S[$rpos][$states{$state}])++;  # match/gap states always exist
+                    }
+
+                    if($p{qual_weighted}){
+                        my $squal = $squals[$i];
+                        my @phreds = Sam::Seq->Qual2phreds($squal);
+                        my @freqs = Sam::Seq->Phreds2freqs(@phreds);
+                        #print STDOUT "$squal @phreds @freqs\n";
+                        my $freq = List::Util::min(@freqs);
+                        ($S[$rpos][$states{$state}])+= $freq; # match/gap states always exist
+                    }else{
+                        ($S[$rpos][$states{$state}])++; # match/gap states always exist
+                    }
                     $rpos++;
 		}
 	
@@ -631,8 +687,6 @@ sub new{
 		len => undef,			# length of the reference sequence, required			
 		ref => undef,			# reference seq object, Fasta::Seq or Fastq::Seq
 		con => undef,			# consensus seq, Fastq::Seq (+cov)
-		ref_con_regions => [],  # regions in the ref seq, to be included in 
-								#  consensus calling, ARRAY of Tuples (start, offset)
 		sam => undef,			# associate with a Sam::Parser object, only an
 								#  index positions to this file will be stored  
 								#  in _aln, data is assumed to be stored in this
@@ -818,12 +872,19 @@ Calculate and the consensus sequence from state matrix. Returns a Fastq::Seq
 sub consensus{
 	my $self = shift;
         my %p = (
-                 hcrs => {},
-                 ignore_coords => {},
+                 hcrs => [],
+                 ignore_coords => undef,
+                 qual_weighted => 0,
+                 use_ref_qual => 0,
                  @_
                 );
         
-	$self->_init_state_matrix(0,$p{ignore_coords});# unless $self->_init_state_matrix();
+	$self->_init_state_matrix(
+                                  ignore_coords => $p{ignore_coords},
+                                  qual_weighted => $p{qual_weighted},
+                                  use_ref_qual => $p{use_ref_qual},
+                                 );
+        
 	$self->_add_pre_calc_fq(@{$p{hcrs}}) if $p{hcrs};
 	$self->_consensus;
 	return $self->{con};
@@ -942,16 +1003,16 @@ sub chimera{
 			push @alns_r, @$_; 
 		};
 		
-		my ($mat_l) = State_matrix(
+		my ($mat_l) = $self->State_matrix(
 			alns => \@alns_l,
-			states => $self->{_states},
-			'length' => $self->len,
+			#states => $self->{_states},
+			#'length' => $self->len,
 		);
 		
-		my ($mat_r) = State_matrix(
+		my ($mat_r) = $self->State_matrix(
 			alns => \@alns_r,
-			states => $self->{_states},
-			'length' => $self->len,
+			#states => $self->{_states},
+			#'length' => $self->len,
 		);
 		
 		my @mat_r = @{$mat_r}[$mat_from .. $mat_to];
@@ -1393,17 +1454,23 @@ sub _init_read_bins{
 =cut
 
 sub _init_state_matrix{
-	my ($self,$append_matrix, $ignore_coords) = (@_,0,undef);
-	
-	my ($S, $states) = State_matrix(
-		'alns' => [$self->alns],
-		'states' => $self->{_states},
-		'length' => $self->len,
-                ignore_coords => $ignore_coords,
-		$append_matrix
-			? ('matrix' => $self->{_state_matrix})
-			: (),
-	);
+	my $self = shift;
+
+	my %p = (
+                 append_matrix => 0,
+                 ignore_coords => undef,
+                 qual_weighted => 0,
+                 @_
+                );
+
+        my ($S, $states) = $self->State_matrix(
+                                               ignore_coords => $p{ignore_coords},
+                                               qual_weighted => $p{qual_weighted},
+                                               use_ref_qual => 1,
+                                               $p{append_matrix}
+                                               ? ('matrix' => $self->{_state_matrix})
+                                               : (),
+                                              );
 
 	# return state matrix
 	$self->{_state_matrix} = $S;
