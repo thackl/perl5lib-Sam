@@ -1460,13 +1460,14 @@ sub _init_state_matrix{
                  append_matrix => 0,
                  ignore_coords => undef,
                  qual_weighted => 0,
+                 use_ref_qual => 0,
                  @_
                 );
 
         my ($S, $states) = $self->State_matrix(
                                                ignore_coords => $p{ignore_coords},
                                                qual_weighted => $p{qual_weighted},
-                                               use_ref_qual => 1,
+                                               use_ref_qual => $p{use_ref_qual},
                                                $p{append_matrix}
                                                ? ('matrix' => $self->{_state_matrix})
                                                : (),
