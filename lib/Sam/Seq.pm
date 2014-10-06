@@ -467,7 +467,7 @@ sub State_matrix{
             for(my $i=0; $i<@seq; $i++){
                 # never add 0, if nothing more matches, a 0 count might be introduced
                 next unless $freqs[$i];
-                die Dumper($self->{_states}, "@seq", $self->ref) unless defined $self->{_states}{$seq[$i]};
+                #ie Dumper($self->{_states}, "@seq", $self->ref) unless defined $self->{_states}{$seq[$i]};
                 ($S[$i][$self->{_states}{$seq[$i]}])+= $freqs[$i];
             }
         }
@@ -608,7 +608,7 @@ sub State_matrix{
                     } elsif ($cigar[$i+1] eq 'I') {
                         if ($i) {
                             # append to prev state
-                          print STDERR "@cigar\n" unless @states;
+                            #print STDERR "@cigar\n" unless @states;
                             if ($states[$#states] eq '-') {
                                 # some mappers, e.g. bowtie2 produce 1D1I instead of 
                                 # mismatchas (1M), as it is cheaper. This needs to be 
@@ -1593,8 +1593,8 @@ sub _consensus{
 		
 		# get most prominent state
 		my $con = $states_rev{$idx};
-		use Data::Dumper;
-		printf "%s\t%s %s\n", $self->{ref}->id(), $con, $idx if $con =~ /-/;
+		#use Data::Dumper;
+		#printf "%s\t%s %s\n", $self->{ref}->id(), $con, $idx if $con =~ /-/;
 		$seq.= $con;
 		push @freqs, ($max_freq) x length($con);
 		$trace.= length($con) == 1 ? 'M' : 'M'.('D'x (length($con)-1));
