@@ -467,6 +467,7 @@ sub State_matrix{
             for(my $i=0; $i<@seq; $i++){
                 # never add 0, if nothing more matches, a 0 count might be introduced
                 next unless $freqs[$i];
+                die Dumper($self->{_states}, "@seq", $self->ref) unless defined $self->{_states}{$seq[$i]};
                 ($S[$i][$self->{_states}{$seq[$i]}])+= $freqs[$i];
             }
         }
@@ -485,7 +486,31 @@ sub State_matrix{
 		# get read cigar, eg 80M2D3M1IM4
 		my @cigar = split(/(\d+)/,$aln->cigar);
 		shift @cigar;
-		
+                
+                if($cigar[1] eq 'S'){
+                    # just move on in query, do nothing else
+                    $aln->seq($aln->seq(substr($aln->seq, $cigar[0])));
+                    $aln->qual($aln->qual(substr($aln->qual, $cigar[0])));
+                    shift @cigar;
+                    shift @cigar;
+                }
+                if($cigar[-1] eq 'S'){
+                    $aln->seq($aln->seq(substr($aln->seq, 0, -$cigar[0])));
+                    $aln->qual($aln->qual(substr($aln->qual, 0, -$cigar[0])));
+                    pop @cigar;
+                    pop @cigar;
+                }
+                if($cigar[1] eq 'H'){
+                    shift @cigar;
+                    shift @cigar;
+                }
+                if($cigar[-1] eq 'H'){
+                    pop @cigar;
+                    pop @cigar;
+                }
+                
+
+                
 		$V->exit("Empty Cigar") unless @cigar;
 		
 		# reference position
@@ -566,7 +591,7 @@ sub State_matrix{
 		
 		# cigar counter, increment by 2 to capture count and type of cigar (10,M) (3,I) (5,D) ...
 		
-		my $qpos = 0;
+		my $qpos = 0; # usually 0, >0 for cigar S
 		for (my $i=0; $i<@cigar;$i+=2) {
                     if ($cigar[$i+1] eq 'M') {
                         push @states, split(//,substr($seq,$qpos,$cigar[$i]));
@@ -583,6 +608,7 @@ sub State_matrix{
                     } elsif ($cigar[$i+1] eq 'I') {
                         if ($i) {
                             # append to prev state
+                          print STDERR "@cigar\n" unless @states;
                             if ($states[$#states] eq '-') {
                                 # some mappers, e.g. bowtie2 produce 1D1I instead of 
                                 # mismatchas (1M), as it is cheaper. This needs to be 
@@ -598,9 +624,6 @@ sub State_matrix{
                             $states[0] = substr($seq,$qpos,$cigar[$i]);
                             $squals[0] = substr($qua,$qpos,$cigar[$i]) if $p{qual_weighted};
                         }
-                        $qpos += $cigar[$i];
-                    }elsif($cigar[$i+1] eq 'S'){
-                        # just move on in query, do nothing else
                         $qpos += $cigar[$i];
                     } else {
                         $V->exit("Unknown Cigar '".$cigar[$i+1]."'");
@@ -903,9 +926,7 @@ By default the state matrix is calculated, wether or not it has
 sub variants{
 	my ($self, $reuse_matrix) = (@_,0);
 	# compute state_matrix if required/wanted
-	unless($self->{_state_matrix} || !$reuse_matrix){
-		$self->_init_state_matrix();
-	}
+        $self->_init_state_matrix() if (!$self->{_state_matrix} || !$reuse_matrix);
 	
 	return $self->_variants;
 }
@@ -924,9 +945,7 @@ sub coverage{
 	# calculate from _state_matrix, not the fastest way but accurate and
 	#  already implemented :)
 	# compute state_matrix if required/wanted
-	unless($self->{_state_matrix} || !$reuse_matrix){
-		$self->_init_state_matrix();
-	}
+        $self->_init_state_matrix() if (!$self->{_state_matrix} || !$reuse_matrix);
 
 	my @covs;
 	foreach my $col(@{$self->{_state_matrix}}){
@@ -952,7 +971,7 @@ By default the state matrix is calculated, wether or not it has
 sub chimera{
 	my ($self, $reuse_matrix) = (@_,0);
 	# compute state_matrix if required/wanted
-	$self->_init_state_matrix() unless ($self->{_state_matrix} || !$reuse_matrix);
+        $self->_init_state_matrix() if (!$self->{_state_matrix} || !$reuse_matrix);
 
 	my @bin_bases = @{$self->{_bin_bases}};
 	return unless @bin_bases > 20; # need at least 20 bins to make sense
