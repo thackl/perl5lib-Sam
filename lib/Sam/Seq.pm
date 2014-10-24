@@ -487,16 +487,18 @@ sub State_matrix{
 		my @cigar = split(/(\d+)/,$aln->cigar);
 		shift @cigar;
                 
+                print STDERR "@cigar\n";
+
                 if($cigar[1] eq 'S'){
                     # just move on in query, do nothing else
-                    $aln->seq($aln->seq(substr($aln->seq, $cigar[0])));
-                    $aln->qual($aln->qual(substr($aln->qual, $cigar[0])));
+                    $seq = substr($seq, $cigar[0]);
+                    $qua = substr($qua, $cigar[0]);
                     shift @cigar;
                     shift @cigar;
                 }
                 if($cigar[-1] eq 'S'){
-                    $aln->seq($aln->seq(substr($aln->seq, 0, -$cigar[0])));
-                    $aln->qual($aln->qual(substr($aln->qual, 0, -$cigar[0])));
+                    $seq = substr($seq, 0, -$cigar[0]);
+                    $qua = substr($qua, 0, -$cigar[0]);
                     pop @cigar;
                     pop @cigar;
                 }
@@ -1066,16 +1068,16 @@ sub chimera{
 			
 		}
 		
-		# x of the overlapping columns need to increase Hx
-		# 1,2,3,4:		>1 (0 mm)
-		# 5,6,7,8:		>2 (1 mm)
-		# 9,10,11,12:	>3 (2 mm)
-		# ...
-		
+                # Hx > 0.7:
+                #  4:1 = 0.72
+                #  5:1 = 0.65
+                #  8:2 = 0.72
+                # 12:3 = 0.72
+                
 		push @coords, {
 			col_range => [$mat_from + $self->{bin_size}, $mat_to - $self->{bin_size}],
 			hx => \@hx_delta,
-			score => (grep{$_> 0}@hx_delta) / @hx_delta,  # number of + columns normalized to total n columns
+			score => (grep{$_> 0.7}@hx_delta) / @hx_delta,  # number of + columns normalized to total n columns
 		}if @hx_delta;
 
 		#TODO: self chimera
