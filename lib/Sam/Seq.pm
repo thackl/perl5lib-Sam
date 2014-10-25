@@ -482,7 +482,8 @@ sub State_matrix{
 		my $orig_seq_length = length($seq);
 		
 		next unless $orig_seq_length > 50;
-		
+
+
 		# get read cigar, eg 80M2D3M1IM4
 		my @cigar = split(/(\d+)/,$aln->cigar);
 		shift @cigar;
@@ -495,8 +496,8 @@ sub State_matrix{
                     shift @cigar;
                 }
                 if($cigar[-1] eq 'S'){
-                    $seq = substr($seq, 0, -$cigar[0]);
-                    $qua = substr($qua, 0, -$cigar[0]);
+                    $seq = substr($seq, 0, -$cigar[-2]);
+                    $qua = substr($qua, 0, -$cigar[-2]);
                     pop @cigar;
                     pop @cigar;
                 }
@@ -509,7 +510,6 @@ sub State_matrix{
                     pop @cigar;
                 }
                 
-
                 
 		$V->exit("Empty Cigar") unless @cigar;
 		
@@ -536,6 +536,7 @@ sub State_matrix{
 							$rpos+= ($mc+$dc);
 							# trim seq
 							substr($seq, 0, $mc+$ic, '');
+							substr($qua, 0, $mc+$ic, '');
 						}
 						last;
 					}
@@ -566,6 +567,7 @@ sub State_matrix{
 							splice(@cigar, -($#cigar-($i+1)));
 							# trim seq
 							substr($seq, -$tail_cut, $tail_cut, '');
+							substr($qua, -$tail_cut, $tail_cut, '');
 						}
 						last;
 					}
@@ -590,7 +592,7 @@ sub State_matrix{
                 my @squals;
 		
 		# cigar counter, increment by 2 to capture count and type of cigar (10,M) (3,I) (5,D) ...
-		
+
 		my $qpos = 0; # usually 0, >0 for cigar S
 		for (my $i=0; $i<@cigar;$i+=2) {
                     if ($cigar[$i+1] eq 'M') {
