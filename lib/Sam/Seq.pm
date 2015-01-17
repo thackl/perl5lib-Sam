@@ -3,7 +3,7 @@ package Sam::Seq;
 use warnings;
 use strict;
 
-# $Id: Seq.pm 134 2013-05-21 14:24:48Z s187512 $
+use overload '""' => \&string;
 
 use List::Util;
 
@@ -1482,6 +1482,33 @@ sub is{
 		}
 	}
 	return $self->{_is};
+}
+
+
+=head2 string
+
+Stringify Sam::Seq object to SAM string.
+
+  print $ss->string();
+  print $ss->string(header => 1,sorted => 1);
+
+=cut
+
+sub string{
+    my $self = shift;
+    my %p = (header => 0, sorted => 0);
+
+    # overload adds (undef, '') to the string call, which crashes @_ to hash
+    if (@_ && defined($_[0])) {
+        %p = (%p, @_);
+    }
+
+    my $string = "";
+    if ($p{header}) {
+        $string.="\@SQ\tSN:".$self->id."\tLN:".$self->len."\n";
+    }
+    $string.= $_ for $self->alns($p{sorted});
+    return $string;
 }
 
 ##------------------------------------------------------------------------##
