@@ -605,7 +605,23 @@ sub opt{
 		: $self->{_opt}{$tag}[1] # value only
 }
 
+=head2 length
 
+Get the alignment length. This is rather slow as it is parsed from cigar string,
+and it is not to be confused with length($aln->seq), which does not account for
+gaps in the alignment.
+
+=cut
+
+sub length{
+    my $self = (@_);
+    my $cigar = $self->cigar;
+    my $l;
+    while ($cigar =~ /(\d+)[MD]/g) {
+        $l += $1;
+    }
+    return $l;
+}
 
 =head1 AUTHOR
 
