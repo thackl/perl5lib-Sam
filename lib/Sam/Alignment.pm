@@ -10,7 +10,7 @@ use overload '""' => \&string;
 # preference libs in same folder over @INC
 use lib '../';
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 our ($REVISION) = '$Revision$' =~ /(\d+)/;
 our ($MODIFIED) = '$Date$' =~ /Date: (\S+\s\S+)/;
 
@@ -273,7 +273,9 @@ use constant {
 	SECOND => 0x80,
 	SECONDARY_ALIGNMENT => 0x100,
 	BAD_QUALITY => 0x200,
-	DUPLICATE => 0x400
+	DUPLICATE => 0x400,
+        # drives ncscoring penality for short alns, see _ncscore for details
+        NCSCORE_CONSTANT => 40,
 };
 
 
@@ -524,30 +526,6 @@ sub string{
     return $s."\n";
 }
 
-=head2 raw
-
-DEPRECATED, aliased to string() for backward compatibility.
-
-Get/Set the raw line. 
-
-NOTE: Following v0.04, inludes trailing newline.
-
-=cut
-
-# sub raw{
-# 	my ($self, $raw, $force) = @_;
-# 	if(defined $raw || $force){ # guarantee newline
-#             $self->{raw} = $raw =~ /\n$/ ? $raw : $raw."\n";
-# 	}
-	
-# 	# {raw} is reset if any other value is changed and will be generated 
-# 	# if required
-# 	unless($self->{raw}){
-# 	}
-	
-# 	return $self->{raw};
-# }
-
 
 =head2 opt
 
@@ -631,6 +609,46 @@ sub length{
     return $l;
 }
 
+=head2 score/nscore/ncscore
+
+Get score (AS:i) / nscore (score/length) / ncscore (score/length * cf), with cf
+being a correction factor accounting for increased uncertainty in short
+alignments. ncscore asymptotically approaches nscore for long alignments, but
+penalizes shorter alignments, depending on NSCORE_CONSTANT.
+
+  cf = l/(NSCORE_CONTANT+l
+
+  |    bp | cf[10] | cf[20] | cf[40] |
+  |-------+--------+--------+--------|
+  |    10 |   0.50 |   0.33 |   0.20 |
+  |    50 |   0.83 |   0.71 |   0.56 |
+  |   100 |   0.91 |   0.83 |   0.71 |
+  |   200 |   0.95 |   0.91 |   0.83 |
+  |   500 |   0.98 |   0.96 |   0.93 |
+  |  1000 |   0.99 |   0.98 |   0.96 |
+  |  5000 |   1.00 |   1.00 |   0.99 |
+  | 10000 |   1.00 |   1.00 |   1.00 |
+  | 50000 |   1.00 |   1.00 |   1.00 |
+
+=cut
+
+sub score{
+    my ($self) = @_;
+    return scalar $self->opt("AS");
+}
+
+sub nscore{
+    my ($self) = @_;
+    return $self->score / $self->length;
+}
+
+sub ncscore{
+    my ($self) = @_;
+    return $self->nscore * ($self->length/(NCSCORE_CONSTANT + $self->length)); 
+}
+
+##----------------------------------------------------------------------------##
+# Privates
 
 =head2 _reset_cached_values
 
