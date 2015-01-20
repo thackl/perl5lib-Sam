@@ -57,72 +57,6 @@ Class for handling sam alignments.
 
 =cut
 
-=head1 CHANGELOG
-
-=head 0.07
-
-=over
-
-=item [Feature] C<< $aln->raw >> overloads "";
-
-=item [Change] C<split(/\s/, $sam, 12)> is replaced by C<split("\t", $sam, 12)>
- for better performance
-
-=item [Feature] Field names are stored in @Sam::Alignment::_Fieldsnames
-
-=back
-
-=head2 0.06
-
-=over
-
-=item [Change] Preference libs in same folder over @INC
-
-=item [Change] Added svn:keywords
-
-=back
-
-=over
-
-=item 0.05
-
-C<< $aln->opt >> can now also be used to savely manipulate the optional
- fields.
-
-=item 0.04
-
-C<raw> line now always contains trailing newline.
-
-=item 0.03
-
-Added support for optional fields at the end of sam lines (TAG:TYPE:VALUE)
-
-=item 0.02
-
-Added 'raw' line to the alignment object attributes. 
-
-=item 0.01
-
-Initial Alignment module. Provides Constructor, generic accessor 
- and conditional C<is> filtering methods as well as exportable 
- "is_flags"
-
-=back
-
-=cut
-
-
-=head1 TODO
-
-=over
-
-=item Tests
-
-=back
-
-=cut
-
-
 # alias for backward comp.
 *raw = \&string;
 
@@ -614,9 +548,9 @@ sub length{
 Get score (AS:i) / nscore (score/length) / ncscore (score/length * cf), with cf
 being a correction factor accounting for increased uncertainty in short
 alignments. ncscore asymptotically approaches nscore for long alignments, but
-penalizes shorter alignments, depending on NSCORE_CONSTANT.
+penalizes shorter ones, based on NSCORE_CONSTANT [40].
 
-  cf = l/(NSCORE_CONTANT+l
+  cf = length / ( NSCORE_CONTANT + length )
 
   |    bp | cf[10] | cf[20] | cf[40] |
   |-------+--------+--------+--------|
@@ -648,7 +582,8 @@ sub ncscore{
 }
 
 ##----------------------------------------------------------------------------##
-# Privates
+
+=head1 Privates METHODS
 
 =head2 _reset_cached_values
 
