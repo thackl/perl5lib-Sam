@@ -614,7 +614,7 @@ gaps in the alignment.
 =cut
 
 sub length{
-    my $self = (@_);
+    my ($self) = @_;
     my $cigar = $self->cigar;
     my $l;
     while ($cigar =~ /(\d+)[MD]/g) {
