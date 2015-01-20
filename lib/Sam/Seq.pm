@@ -712,7 +712,7 @@ sub add_aln_by_score{
 			my $rm_bases = pop(@{$self->{_bin_lengths}[$bin]});
 
 			# remove aln from global store
-			delete($self->{_alns}{
+ 			delete($self->{_alns}{
 					# and remove aln id from aln bins
 					pop(@{$self->{_bin_alns}[$bin]})
 				});
@@ -757,25 +757,33 @@ sub add_aln{
 }
 
 
-=head2 remove_aln
+=head2 remove_aln_by_iid
 
 Remove a Sam::Alignment from Sam::Seq (including position bins, if it exits).
  Returns the removed Sam::Alignment or undef.
 
 =cut
 
-sub remove_aln{
-	my ($self, $id);
+sub remove_aln_by_iid{
+	my ($self, $id) = @_;
 
 	my $aln = delete $self->{_alns}{$id};
 	defined $aln || return;
 
-	my $bin = $self->_bin($aln);
-	my $idx = List::Util::first {$self->{_bin_alns}[$_] == $id} 1..@{$self->{_bin_alns}};
-	defined $idx || return;
+	my $bin = $self->bin($aln);
+        my $ba = $self->{_bin_alns}[$bin];
+        if (@$ba) {
+            use Data::Dumper;
 
-	splice(@{$self->{_bin_scores}[$bin]}, $idx, 1);
-	splice(@{$self->{_bin_alns}[$bin]}, $idx, 1);
+            my $idx = List::Util::first {$ba->[$_] == $id} 0..@$ba-1;
+            defined $idx || return;
+
+            splice(@{$self->{_bin_scores}[$bin]}, $idx, 1);
+            splice(@{$self->{_bin_alns}[$bin]}, $idx, 1);
+            my $rm_bases = splice(@{$self->{_bin_lengths}[$bin]}, $idx, 1);
+            $self->{_bin_bases}[$bin] -= $rm_bases;
+        }
+
 	return $aln;
 }
 
@@ -1111,6 +1119,54 @@ sub alns{
 	}
 }
 
+
+# TODO: aln_iids
+
+=head2 aln_iids(<SORTED_BY_POS>)
+
+Returns a list of all Sam::Alignments internal IDS (iid). Default order is
+ identical to C<next_aln> as long as no alignments are added or removed. If
+ first argument TRUE, iids are ordered by alignment position.
+
+=cut
+
+sub aln_iids{
+	my ($self, $sorted_by_pos) = @_;
+	wantarray || return scalar keys %{$self->{_alns}};
+	if($self->{sam}){
+		# get indices from _aln and retrieve objects from parser
+		if($sorted_by_pos){
+                    my %pos;
+                    while (my ($k, $v) = each %{$self->{_alns}}) {
+                        $pos{$k} = $self->{sam}->aln_by_pos($v)
+                    }
+                    return sort{ $pos{$a} <=> $pos{$b} } keys %pos;
+		}else{
+                    return keys %{$self->{_alns}};
+		}
+	}else{
+		# return objects from _aln
+		if($sorted_by_pos){
+			return sort{ $self->{_alns}{$a}{pos} <=> $self->{_alns}{$b}{pos} } keys %{$self->{_alns}};
+		}else{
+			return keys %{$self->{_alns}};
+		}
+
+	}
+}
+
+
+=head2 aln_by_iid
+
+Return alignment by iid.
+
+=cut
+
+sub aln_by_iid{
+    my ($self, $iid) = @_;
+    die __PACKAGE__."->aln_by_iid: IID ($iid) does not exist\n" unless exists $self->{_alns}{$iid};
+    return $self->{_alns}{$iid};
+}
 
 =head2 alns_by_bins
 
