@@ -13,7 +13,7 @@ use lib '../';
 use Verbose;
 
 use Sam::Parser;
-use Sam::Alignment 0.09 ':flags';
+use Sam::Alignment 0.10 ':flags';
 
 use Fastq::Seq;
 use Fasta::Seq;
@@ -24,7 +24,7 @@ use constant {
     PROOVREAD_CONSTANT => 120,
 };
 
-our $VERSION = '0.14';
+our $VERSION = '0.15';
 
 
 
@@ -745,7 +745,7 @@ sub add_aln_by_score{
 	my $bin = $self->bin($aln);
 	return 0 if $aln->cigar() =~ /S/; # omit alignments outside bins
 	my $bases = length($aln->seq);
-	my $nscore = $aln->opt('AS') / $bases;
+	my $nscore = $aln->score / $bases;
 #	use Data::Dumper;
 #	print Dumper({
 #		$aln->opt('AS'),
@@ -1157,7 +1157,7 @@ sub filter_contained_alns{
     # sort idx by coords-length, descending
     my @iids = keys %$alns;
     my @coords = map{[ $alns->{$_}->pos, $alns->{$_}->length ]} @iids;
-    my @scores = map{abs($alns->{$_}->opt('AS'))} @iids;
+    my @scores = map{$alns->{$_}->score} @iids;
 
     my @idx = sort{$coords[$b][1] <=> $coords[$a][1]}(0..$#iids);
 
