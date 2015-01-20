@@ -136,7 +136,7 @@ filter_rep_region_alns for each region with higher coverage.
 our $RepCoverage = 0;
 
 
-=head $MinScore/$MinNScore/$MinNCScore
+=head2 $MinScore/$MinNScore/$MinNCScore
 
 Minimum score/nscore/ncscore cutoffs for accoring filter_by_n/c/score()
 functions;
