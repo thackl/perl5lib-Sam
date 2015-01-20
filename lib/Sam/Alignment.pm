@@ -3,17 +3,12 @@ package Sam::Alignment;
 use warnings;
 use strict;
 
-# $Id$
-
 use overload '""' => \&string;
 
 # preference libs in same folder over @INC
 use lib '../';
 
-our $VERSION = '0.09';
-our ($REVISION) = '$Revision$' =~ /(\d+)/;
-our ($MODIFIED) = '$Date$' =~ /Date: (\S+\s\S+)/;
-
+our $VERSION = '0.10';
 
 =head1 NAME 
 
@@ -65,6 +60,30 @@ Class for handling sam alignments.
 =cut
 
 our @_Fieldsnames = qw(qname flag rname pos mapq cigar rnext pnext tlen seq qual opt);
+
+
+=head2 $InvertScores;
+
+=cut
+
+our $InvertScores;
+
+=head1 Class METHODS
+
+=cut
+
+=head2 InvertScores
+
+Get/Set $Sam::Seq::InvertScore. Default OFF.
+
+=cut
+
+sub InvertScores{
+	my ($class, $flag) = @_;
+        return $InvertScores unless defined $flag;
+	$InvertScores = $flag ? 1 : 0;
+	return $InvertScores;
+}
 
 
 =head1 Constructor METHOD
@@ -545,8 +564,13 @@ sub length{
 
 =head2 score/nscore/ncscore
 
-Get score (AS:i) / nscore (score/length) / ncscore (score/length * cf), with cf
-being a correction factor accounting for increased uncertainty in short
+Get score (AS:i) / nscore (score/length) / ncscore (score/length * CF).
+
+If $InvertScore is true, scores are multipled by -1. That way one can work
+with/filter scores where originally smaller values are better, e.g. blasr
+scores.
+
+CF is a correction factor accounting for increased uncertainty in short
 alignments. ncscore asymptotically approaches nscore for long alignments, but
 penalizes shorter ones, based on NSCORE_CONSTANT [40].
 
@@ -568,7 +592,7 @@ penalizes shorter ones, based on NSCORE_CONSTANT [40].
 
 sub score{
     my ($self) = @_;
-    return scalar $self->opt("AS");
+    return $InvertScores ? $self->opt("AS") * -1 : scalar $self->opt("AS");
 }
 
 sub nscore{
