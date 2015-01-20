@@ -540,6 +540,28 @@ sub opt{
 		: $self->{_opt}{$tag}[1] # value only
 }
 
+
+=head2 full_length
+
+Get the length of the full query sequence including clipped bases. This will
+crash if mapping software fails to annotate clipped alignments properly with
+H/S.
+
+=cut
+
+sub full_length{
+    my ($self) = @_;
+    return $self->{full_length} if defined($self->{full_length});
+
+    my $cigar = $self->cigar;
+    my $l;
+    while ($cigar =~ /(\d+)[MDHS]/g) { $l += $1; };
+
+    $self->{full_length} = $l;
+    return $l;
+}
+
+
 =head2 length
 
 Get the length of the actually aligned sequence, meaning the number of query
@@ -621,6 +643,7 @@ sub ncscore{
 
 sub _reset_cached_values{
     $_[0]->{length} = undef;
+    $_[0]->{full_length} = undef;
 }
 
 =head1 AUTHOR
