@@ -403,6 +403,7 @@ Get/Set the pos.
 sub pos{
 	my ($self, $pos, $force) = @_;
         if(defined $pos || $force){
+            $self->_reset_cached_values();
             $self->{pos} = $pos;
         }
 	return $self->{pos};
@@ -431,6 +432,7 @@ Get/Set the cigar.
 sub cigar{
 	my ($self, $cigar, $force) = @_;
         if(defined $cigar || $force){
+            $self->_reset_cached_values();
             $self->{cigar} = $cigar;
         }
 	return $self->{cigar};
@@ -473,6 +475,7 @@ Get/Set the tlen.
 sub tlen{
 	my ($self, $tlen, $force) = @_;
         if(defined $tlen || $force){
+            $self->_reset_cached_values();
             $self->{tlen} = $tlen;
         }
 	return $self->{tlen};
@@ -487,6 +490,7 @@ Get/Set the seq.
 sub seq{
 	my ($self, $seq, $force) = @_;
         if(defined $seq || $force){
+            $self->_reset_cached_values();
             $self->{seq} = $seq;
         }
 	return $self->{seq};
@@ -607,20 +611,33 @@ sub opt{
 
 =head2 length
 
-Get the alignment length. This is rather slow as it is parsed from cigar string,
-and it is not to be confused with length($aln->seq), which does not account for
-gaps in the alignment.
+Get the alignment length. This can be rather slow as it is parsed from cigar
+string, and it is not to be confused with length($aln->seq), which does not
+account for gaps in the alignment. However, the result is cached, making
+successive calls fast.
 
 =cut
 
 sub length{
     my ($self) = @_;
+    return $self->{length} if defined($self->{length});
+
     my $cigar = $self->cigar;
     my $l;
     while ($cigar =~ /(\d+)[MD]/g) {
         $l += $1;
     }
+    $self->{length} = $l;
     return $l;
+}
+
+
+=head2 _reset_cached_values
+
+=cut
+
+sub _reset_cached_values{
+    $_[0]->{length} = undef;
 }
 
 =head1 AUTHOR
