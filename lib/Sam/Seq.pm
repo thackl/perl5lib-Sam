@@ -1172,9 +1172,13 @@ sub filter_contained_alns{
         if ($coo->[1] < 21) { # handle very short hits
             $coo->[0] += int($coo->[1]/2);
             $coo->[1] = 1;
-        }else { # adjust longer hits
+        }elsif ($coo->[1] < 21) { # adjust short hits (+-10bp)
             $coo->[0]+=10;
             $coo->[1]-=20;
+        }else { # adjust long hits (+- 10%);
+            my $ad = int($coo->[1] * 0.1);
+            $coo->[0]+=$ad;
+            $coo->[1]-=(2*$ad);
         }
 
         if (_is_in_range($coo, \@coords)) {
