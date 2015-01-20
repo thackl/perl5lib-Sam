@@ -542,10 +542,12 @@ sub opt{
 
 =head2 length
 
-Get the alignment length. This can be rather slow as it is parsed from cigar
-string, and it is not to be confused with length($aln->seq), which does not
-account for gaps in the alignment. However, the result is cached, making
-successive calls fast.
+Get the length of the actually aligned sequence, meaning the number of query
+bases in the alignment. For global alignments or hard clipping, this is equal to
+length($aln->seq).
+
+This can be a little bit slow as cigar string parsing might be
+required. However, the result is cached, making successive calls less expensive.
 
 =cut
 
@@ -555,12 +557,16 @@ sub length{
 
     my $cigar = $self->cigar;
     my $l;
-    while ($cigar =~ /(\d+)[MD]/g) {
-        $l += $1;
+    if ($self->seq eq "*" || $cigar =~ /^\d+S|S$/) { # seq NA or soft clipped
+        while ($cigar =~ /(\d+)[MD]/g) { $l += $1; };
+    }else {
+        $l = length($self->seq);
     }
+
     $self->{length} = $l;
     return $l;
 }
+
 
 =head2 score/nscore/ncscore
 
