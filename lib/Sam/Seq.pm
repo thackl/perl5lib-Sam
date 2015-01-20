@@ -1499,18 +1499,38 @@ sub _stddev{
 
 =head2 _is_in_range
 
-Test if a value lies within a given set of ranges.
+Test if a value/range lies within a given set of ranges. ranges are expected in
+[OFFSET, LENGTH] format.
+
+  _is_in_range(5, [[0, 3], [4,7]])
+  _is_in_range([2,2], [[0, 3], [4,7]])
 
 =cut
 
 sub _is_in_range{
     my ($c, $ranges) = @_;
-    for my $r (@$ranges){
-        return 1 if $c >= $r->[0] && $c < $r->[0] + $r->[1];
+    die __PACKAGE__."::_is_in_range: requires exactly to arguments: VALUE or RANGE[OFFSET, LENGTH],  RANGES[[OFFSET, LENGTH][OFFSET, LENGTH]]" unless @_ == 2;
+
+    if (CORE::ref $c eq "ARRAY") {
+        my $c1 = $c->[0];
+        my $c2 = $c->[0] + $c->[1]-1;
+        for my $r (@$ranges){
+            if (
+                ($c1 >= $r->[0] && $c1 < $r->[0] + $r->[1]) &&
+                ($c2 >= $r->[0] && $c2 < $r->[0] + $r->[1])
+            ){
+                return 1;
+            }
+        }
+    }elsif (! CORE::ref $c) {
+        for my $r (@$ranges){
+            return 1 if $c >= $r->[0] && $c < $r->[0] + $r->[1];
+        }
+    }else {
+        die __PACKAGE__."::_is_in_range: first arguments needs to be SCALAR or ARRAY ref";
     }
     return 0;
 }
-
 
 ##------------------------------------------------------------------------##
 
