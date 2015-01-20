@@ -13,7 +13,7 @@ use lib '../';
 use Verbose;
 
 use Sam::Parser;
-use Sam::Alignment ':flags';
+use Sam::Alignment 0.09 ':flags';
 
 use Fastq::Seq;
 use Fasta::Seq;
@@ -21,10 +21,10 @@ use Fasta::Seq;
 use constant {
     # :) scaling constant for frequency to phred conversion. The higher
     # the value, the more trust is put into frequency (proovread-1.01: 50)
-    PROOVREAD_CONSTANT => 120
+    PROOVREAD_CONSTANT => 120,
 };
 
-our $VERSION = '0.12';
+our $VERSION = '0.14';
 
 
 
@@ -126,6 +126,27 @@ Default 1. Used if alignment w/o qual is used in quality context
 
 our $FallbackPhred = 1;
 
+=head2 $RepCoverage
+
+Default = 0, which deactivates the feature. If set triggers
+filter_rep_region_alns for each region with higher coverage.
+
+=cut
+
+our $RepCoverage = 0;
+
+
+=head $MinScore/$MinNScore/$MinNCScore
+
+Minimum score/nscore/ncscore cutoffs for accoring filter_by_n/c/score()
+functions;
+
+=cut
+
+our $MinScore = undef;
+our $MinNScore = undef;
+our $MinNCScore = undef;
+
 # DEPRECATED
 #=head2 %Freqs2phreds
 #
@@ -176,6 +197,42 @@ sub PhredOffset{
 	my ($class, $offset) = @_;
 	$PhredOffset = $offset if defined $offset;
 	return $PhredOffset;
+}
+
+=head2 RepCoverage
+
+Get/Set $Sam::Seq::RepCoverage. Default 0.
+
+=cut
+
+sub RepCoverage{
+	my ($class, $cov) = @_;
+	$RepCoverage = $cov if defined $cov;
+	return $RepCoverage;
+}
+
+=head2 MinScore/MinNScore/MinNCScore
+
+Get/Set $Sam::Seq::MinScore/MinNScore/MinNCScore. Default undef.
+
+=cut
+
+sub MinScore{
+	my ($class, $score, $force) = @_;
+	$MinScore = $score if defined($score) || $force;
+	return $MinScore;
+}
+
+sub MinNScore{
+	my ($class, $score, $force) = @_;
+	$MinNScore = $score if defined($score) || $force;
+	return $MinNScore;
+}
+
+sub MinNCScore{
+	my ($class, $score, $force) = @_;
+	$MinNCScore = $score if defined($score) || $force;
+	return $MinNCScore;
 }
 
 =head2 InDelTaboo
@@ -990,6 +1047,152 @@ sub chimera{
 }
 
 
+=head2 filter_by_score/filter_by_nscore/filter_by_ncscore
+
+Filter alignments by score/nscore/ncscore. See _ncscore() for details on ncscore
+computation.
+
+=cut
+
+sub filter_by_score{
+    my $self = shift;
+    foreach ($self->aln_iids) {
+        my $aln = $self->aln_by_iid($_);
+        $self->remove_aln_by_iid($_) if $aln->score < $MinScore;
+    }
+}
+
+sub filter_by_nscore{
+    my $self = shift;
+    foreach ($self->aln_iids) {
+        my $aln = $self->aln_by_iid($_);
+        $self->remove_aln_by_iid($_) if $aln->nscore < $MinNScore;
+    }
+}
+
+sub filter_by_ncscore{
+    my $self = shift;
+    foreach ($self->aln_iids) {
+        my $aln = $self->aln_by_iid($_);
+        $self->remove_aln_by_iid($_) if $aln->ncscore < $MinNCScore;
+    }
+}
+
+=head2 filter_rep_region_alns
+
+Filter alignments that mostly align to repetitive regions - regions with high
+amount of stacked short local alignments.
+
+  convert:
+
+  --        -            --
+  --        -            ---
+  --        -             ---
+  -----  ------------- ----------
+  ________________________________
+
+  to:
+
+  -----  ------------- ----------
+  ________________________________
+
+=cut
+
+sub filter_rep_region_alns{
+    my ($self, $reuse_matrix) = (@_,0);
+    $self->_init_state_matrix() if (!$self->{_state_matrix} || !$reuse_matrix);
+
+    # get repetitive regions
+    my @cov = $self->coverage(1);
+    my $cmax = $RepCoverage;
+    my $high = 0;
+    my @rwin;
+
+    for (my $i=0; $i<@cov; $i++) {
+        if ($cov[$i] < $cmax) {
+            if ($high) {
+                $high = 0;
+                $rwin[$#rwin][1] = $i - $rwin[$#rwin][0];
+            }
+        } else {
+            unless ($high) {
+                $high = 1;
+                push @rwin, [$i];
+            }
+        }
+    }
+    $rwin[$#rwin][1] = @cov - $rwin[$#rwin][0] if $high;
+
+
+    # filter rep alns
+    if (@rwin) {
+        # extend repetitive regions by 150bp at each side
+        @rwin = map{
+            $_->[0]-=150;
+            $_->[1]+=300;
+            $_;
+        }@rwin;
+
+        # check sequence boundaries
+        if ( $rwin[0][0] < 0 ){
+            $rwin[0][1]+= $rwin[0][0];
+            $rwin[0][0] = 0;
+        };
+        if ( my $too_long = @cov - ($rwin[$#rwin][0] + $rwin[$#rwin][1]) < 0 ){
+            $rwin[$#rwin][1]-= $too_long;
+        }
+
+        # filter alns
+        foreach my $id ($self->aln_iids) {
+            my $aln = $self->aln_by_iid($id);
+            $self->remove_aln_by_iid($id) if _is_in_range([$aln->pos, $aln->length], \@rwin);
+        }
+    }
+}
+
+sub filter_contained_alns{
+    my ($self) = @_;
+    my $alns = $self->{_alns};
+
+    # sort idx by coords-length, descending
+    my @iids = keys %$alns;
+    my @coords = map{[ $alns->{$_}->pos, $alns->{$_}->length ]} @iids;
+    my @scores = map{abs($alns->{$_}->opt('AS'))} @iids;
+
+    my @idx = sort{$coords[$b][1] <=> $coords[$a][1]}(0..$#iids);
+
+    @iids = @iids[@idx];
+    @coords = @coords[@idx];
+    @scores = @scores[@idx];
+
+    # filter alns
+    while (@iids > 1) {
+        my $iid = pop @iids;
+        my $coo = pop @coords;
+        if ($coo->[1] < 21) { # handle very short hits
+            $coo->[0] += int($coo->[1]/2);
+            $coo->[1] = 1;
+        }else { # adjust longer hits
+            $coo->[0]+=10;
+            $coo->[1]-=20;
+        }
+
+        if (_is_in_range($coo, \@coords)) {
+            if ($coo->[1] > $coords[$#coords][1]-40) { # hits of almost identical length
+                # compare by score
+                my $i = @coords;
+                if ($scores[$i] > $scores[$i-1]) { # exchange popped and last in queue
+                    my $iid_restore = $iid;
+                    $iid = pop @iids;
+                    pop @coords;
+                    push @iids, $iid_restore;
+                    push @coords, $coo;
+                }
+            }
+            $self->remove_aln_by_iid($iid);
+        }
+    }
+}
 
 ##------------------------------------------------------------------------##
 
