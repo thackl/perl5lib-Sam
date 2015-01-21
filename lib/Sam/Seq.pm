@@ -744,9 +744,6 @@ sub add_aln_by_score{
 	my ($self, $aln) = @_;
 
 	my $bin = $self->bin($aln);
-        # DEPRECATED
-        # state matrix should be able to handle clipped alns
-        #return 0 if $aln->cigar() =~ /S/; # omit alignments outside bins
 
 	my $ncscore = $aln->ncscore;
         return undef unless defined $ncscore;
@@ -1412,7 +1409,7 @@ Compute the bin of given alignment. The bin is determined based on the
 
 sub bin{
 	my ($self,$aln) = @_;
-	return int(( $aln->pos + ( length($aln->seq)/2 )) / $self->{bin_size})
+	return int(( $aln->pos + ( $aln->length/2 )) / $self->{bin_size})
 }
 
 
