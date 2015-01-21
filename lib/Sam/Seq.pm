@@ -101,6 +101,16 @@ Trim reads to prevent insertions/deletions within the first/last
 
 our $InDelTaboo = 0.1;
 
+=head2 InDelTabooLength [undef]
+
+Trim reads to prevent insertions/deletions within the first/last
+ InDelTabooLength bps of the read. N=0 deactivates the feature. If defined,
+ superceeds relative InDelTaboo
+
+=cut
+
+our $InDelTabooLength = undef;
+
 =head2 $Trim
 
 Boolean. Deactivate trimming completely, including leading/trailing indels
@@ -245,6 +255,18 @@ sub InDelTaboo{
 	my ($class, $indeltaboo) = @_;
 	$InDelTaboo = $indeltaboo if defined $indeltaboo;
 	return $InDelTaboo;
+}
+
+=head2 InDelTabooLength
+
+Get/Set $Sam::Seq::InDelTabooLength. Default undef.
+
+=cut
+
+sub InDelTabooLength{
+	my ($class, $indeltaboolength, $force) = @_;
+	$InDelTabooLength = $indeltaboolength if defined $indeltaboolength || $force;
+	return $InDelTabooLength;
 }
 
 =head2 Trim
@@ -476,10 +498,10 @@ sub State_matrix{
 			my $mc = 0;
 			my $dc = 0;
 			my $ic = 0;
-			my $InDelTabooLength = int($orig_seq_length * $InDelTaboo + 0.5);
+			my $indeltaboolength = $InDelTabooLength ? $InDelTabooLength : int($orig_seq_length * $InDelTaboo + 0.5);
 			for(my $i=0; $i<@cigar;$i+=2){
 				if($cigar[$i+1] eq 'M'){
-					if($mc + $ic + $cigar[$i] > $InDelTabooLength){
+					if($mc + $ic + $cigar[$i] > $indeltaboolength){
 						if($i){# there was something before this match
 							# only cut before this match
 							# trim cigar
@@ -511,7 +533,7 @@ sub State_matrix{
 			for(my $i=$#cigar-1; $i;$i-=2){
 				if($cigar[$i+1] eq 'M'){
 					$tail+=$cigar[$i];
-					if($tail > $InDelTabooLength){
+					if($tail > $indeltaboolength){
 						if($i < $#cigar-1){# there is after this match
 							# only cut before this match
 							my $tail_cut = $tail-$cigar[$i];
