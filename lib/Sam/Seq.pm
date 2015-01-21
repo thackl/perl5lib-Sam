@@ -24,7 +24,7 @@ use constant {
     PROOVREAD_CONSTANT => 120,
 };
 
-our $VERSION = '0.15';
+our $VERSION = '0.16';
 
 
 
@@ -726,12 +726,13 @@ sub new{
 
 =head2 add_aln_by_score
 
-Add a sam alignment object of a mapped illumina read to the object, based
- on position and score. Takes a file position as second object. If provided
- this position is stored instead of the actual alignment, the position is
- assumed to be a index pointing to the alignment in the file indicated by
- C<< $sam_seq->sam >>. Returns internal alignment id (>0) if aln has been
- added, else 0.
+Add a sam alignment object of a mapped illumina read to the object, based on
+ position and score. Takes a file position as second object. If provided this
+ position is stored instead of the actual alignment, the position is assumed to
+ be a index pointing to the alignment in the file indicated by C<< $sam_seq->sam
+ >>. Returns internal alignment id (>0) if aln has been added, 0 if the
+ alignment did not make the threshold or undef, if alignment couldn't be
+ assessed, e.g. because it had no score/was unaligned.
 
   $sam_seq->add_aln_by_score($aln);
   $sam_seq->add_aln_by_score($aln, tell($sam_fh);
@@ -743,45 +744,42 @@ sub add_aln_by_score{
 	my ($self, $aln) = @_;
 
 	my $bin = $self->bin($aln);
-	return 0 if $aln->cigar() =~ /S/; # omit alignments outside bins
-	my $bases = length($aln->seq);
-	my $nscore = $aln->score / $bases;
-#	use Data::Dumper;
-#	print Dumper({
-#		$aln->opt('AS'),
-#		aln => $aln->cigar,
-#		length => $self->len,
-#		bin => $bin,
-#		bin_max_bases => $self->{bin_max_bases},
-#		bin_bases => scalar @{$self->{_bin_bases}},
-#		qname => $aln->qname
-#	});
+        # DEPRECATED
+        # state matrix should be able to handle clipped alns
+        #return 0 if $aln->cigar() =~ /S/; # omit alignments outside bins
+
+	my $nscore = $aln->nscore;
+        return undef unless defined $nscore;
+
 	# if bin_bases are full, check if new nscore is good enough
 	if( $self->{_bin_bases}[$bin] > $self->{bin_max_bases} ){
 		# ignore scores, that are too low
 		if( $nscore <= $self->{_bin_scores}[$bin][-1] ){
 			return 0;
 		}else{ # sufficient score
-			# remove lowest scoring aln before adding new one
-			#  from score bins
-			pop(@{$self->{_bin_scores}[$bin]});
-			#  from length bin
-			my $rm_bases = pop(@{$self->{_bin_lengths}[$bin]});
+                    my $iid = $self->{_bin_alns}[$bin][-1];
+                    $self->remove_aln_by_iid($iid);
 
-			# remove aln from global store
- 			delete($self->{_alns}{
-					# and remove aln id from aln bins
-					pop(@{$self->{_bin_alns}[$bin]})
-				});
-
-			# adjust bin_bases by length length difference of new and old alignment
-			$self->{_bin_bases}[$bin] += ($bases - $rm_bases);
-		}
-	}else{
-		# new aln added w/o removal other aln -> add length to bin bases
-		$self->{_bin_bases}[$bin] += $bases;
+                        ## DEPRECATED
+                        # # remove lowest scoring aln before adding new one
+                        # #  from score bins
+                        # pop(@{$self->{_bin_scores}[$bin]});
+                        # #  from length bin
+                        #x my $rm_bases = pop(@{$self->{_bin_lengths}[$bin]});
+                        #
+                        # # remove aln from global store
+                        # delete($self->{_alns}{
+                        # 		# and remove aln id from aln bins
+                        # 		pop(@{$self->{_bin_alns}[$bin]})
+                        # 	});
+                        #
+                        # # adjust bin_bases by length length difference of new and old alignment
+                        # $self->{_bin_bases}[$bin] += ($bases - $rm_bases);
+                }
 	}
 
+        my $bases = $aln->length;
+        $self->{_bin_bases}[$bin] += $bases;
 	my $id = $self->add_aln($aln);
 
 	# set score/id at the right place
