@@ -748,13 +748,13 @@ sub add_aln_by_score{
         # state matrix should be able to handle clipped alns
         #return 0 if $aln->cigar() =~ /S/; # omit alignments outside bins
 
-	my $nscore = $aln->nscore;
-        return undef unless defined $nscore;
+	my $ncscore = $aln->ncscore;
+        return undef unless defined $ncscore;
 
-	# if bin_bases are full, check if new nscore is good enough
+	# if bin_bases are full, check if new ncscore is good enough
 	if( $self->{_bin_bases}[$bin] > $self->{bin_max_bases} ){
 		# ignore scores, that are too low
-		if( $nscore <= $self->{_bin_scores}[$bin][-1] ){
+		if( $ncscore <= $self->{_bin_scores}[$bin][-1] ){
 			return 0;
 		}else{ # sufficient score
                     my $iid = $self->{_bin_alns}[$bin][-1];
@@ -784,9 +784,9 @@ sub add_aln_by_score{
 
 	# set score/id at the right place
 	my $i = @{$self->{_bin_scores}[$bin]} - 1;
-	$i-- while $i >= 0 && $nscore > $self->{_bin_scores}[$bin][$i];
+	$i-- while $i >= 0 && $ncscore > $self->{_bin_scores}[$bin][$i];
 	# store new  score and _id of aln at correct position
-	splice(@{$self->{_bin_scores}[$bin]}, $i+1, 0, $nscore);
+	splice(@{$self->{_bin_scores}[$bin]}, $i+1, 0, $ncscore);
 	splice(@{$self->{_bin_alns}[$bin]}, $i+1, 0, $id);
 	splice(@{$self->{_bin_lengths}[$bin]}, $i+1, 0, $bases);
 
