@@ -620,17 +620,25 @@ penalizes shorter ones, based on NSCORE_CONSTANT [40].
 
 sub score{
     my ($self) = @_;
-    return $InvertScores ? $self->opt("AS") * -1 : scalar $self->opt("AS");
+    my $score = $self->opt("AS");
+    return unless defined $score;
+    return $InvertScores ? $score * -1 : $score;
 }
 
 sub nscore{
     my ($self) = @_;
-    return $self->score / $self->length;
+    my $score = $self->score;
+    return unless defined $score;
+    
+    return $score / $self->length;
 }
 
 sub ncscore{
     my ($self) = @_;
-    return $self->nscore * ($self->length/(NCSCORE_CONSTANT + $self->length));
+    my $nscore = $self->nscore;
+    return unless defined $nscore;
+
+    return $nscore * ($self->length/(NCSCORE_CONSTANT + $self->length));
 }
 
 ##----------------------------------------------------------------------------##
