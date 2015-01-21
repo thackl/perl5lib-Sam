@@ -830,7 +830,6 @@ sub remove_aln_by_iid{
 	my $bin = $self->bin($aln);
         my $ba = $self->{_bin_alns}[$bin];
         if (@$ba) {
-            use Data::Dumper;
 
             my $idx = List::Util::first {$ba->[$_] == $id} 0..@$ba-1;
             defined $idx || return;
@@ -1058,7 +1057,8 @@ sub filter_by_score{
     my $self = shift;
     foreach ($self->aln_iids) {
         my $aln = $self->aln_by_iid($_);
-        $self->remove_aln_by_iid($_) if $aln->score < $MinScore;
+        my $score = $aln->score;
+        $self->remove_aln_by_iid($_) if ! defined($score) || $score < $MinScore;
     }
 }
 
@@ -1066,7 +1066,8 @@ sub filter_by_nscore{
     my $self = shift;
     foreach ($self->aln_iids) {
         my $aln = $self->aln_by_iid($_);
-        $self->remove_aln_by_iid($_) if $aln->nscore < $MinNScore;
+        my $nscore = $aln->nscore;
+        $self->remove_aln_by_iid($_) if ! defined($nscore) || $nscore < $MinNScore;
     }
 }
 
@@ -1074,7 +1075,9 @@ sub filter_by_ncscore{
     my $self = shift;
     foreach ($self->aln_iids) {
         my $aln = $self->aln_by_iid($_);
-        $self->remove_aln_by_iid($_) if $aln->ncscore < $MinNCScore;
+        my $ncscore = $aln->ncscore;
+        $self->remove_aln_by_iid($_) if ! defined($ncscore) || $ncscore < $MinNCScore;
+
     }
 }
 
