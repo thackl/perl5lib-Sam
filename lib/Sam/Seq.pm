@@ -750,29 +750,13 @@ sub add_aln_by_score{
 
 	# if bin_bases are full, check if new ncscore is good enough
 	if( $self->{_bin_bases}[$bin] > $self->{bin_max_bases} ){
-		# ignore scores, that are too low
-		if( $ncscore <= $self->{_bin_scores}[$bin][-1] ){
-			return 0;
-		}else{ # sufficient score
-                    my $iid = $self->{_bin_alns}[$bin][-1];
-                    $self->remove_aln_by_iid($iid);
-
-                        ## DEPRECATED
-                        # # remove lowest scoring aln before adding new one
-                        # #  from score bins
-                        # pop(@{$self->{_bin_scores}[$bin]});
-                        # #  from length bin
-                        #x my $rm_bases = pop(@{$self->{_bin_lengths}[$bin]});
-                        #
-                        # # remove aln from global store
-                        # delete($self->{_alns}{
-                        # 		# and remove aln id from aln bins
-                        # 		pop(@{$self->{_bin_alns}[$bin]})
-                        # 	});
-                        #
-                        # # adjust bin_bases by length length difference of new and old alignment
-                        # $self->{_bin_bases}[$bin] += ($bases - $rm_bases);
-                }
+            # ignore scores, that are too low
+            if( $ncscore <= $self->{_bin_scores}[$bin][-1] ){
+                return 0;
+            }else{ # sufficient score
+                my $iid = $self->{_bin_alns}[$bin][-1];
+                $self->remove_aln_by_iid($iid);
+            }
 	}
 
         my $bases = $aln->length;
