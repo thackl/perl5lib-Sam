@@ -451,7 +451,7 @@ sub next_header_line{
 			if(wantarray){
 				return $tag eq '@CO' 
 					? (CO => $content, raw => $sam, tag => $tag) 
-					: (split(/[:\t]/, $content), raw => $sam, tag => $tag);
+					: ($content =~ /(\w\w):(\S+)/g, raw => $sam, tag => $tag);
 			}else{
 				return $sam;
 			}
@@ -466,10 +466,10 @@ sub next_header_line{
 			return; 
 											#  /^\@?($search_tag\w{0,2})\s(.*)/
 		}elsif (my ($tag, $content) = $sam =~ /^(\@?(?:$search_tag)\w{0,2})\s(.*)/){
-			if(wantarray){
+                    if(wantarray){
 				return $tag eq '@CO' 
 					? (CO => $content, raw => $sam, tag => $tag) 
-					: (split(/[:\t]/, $content), raw => $sam, tag => $tag);
+					: ($content =~ /(\w\w):(\S+)/g, raw => $sam, tag => $tag);
 			}else{
 				return $sam;
 			}
