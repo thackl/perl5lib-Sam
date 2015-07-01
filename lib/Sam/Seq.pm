@@ -1228,6 +1228,7 @@ sub filter_by_coverage{
             my $alnc = @$iids;
             my $rmc = 0;
             while (1) {
+                last if @$lens <2;
                 my $tl = 0;
                 $tl += $_ for @$lens;
                 last if $tl <= $self->{max_bin_bases};
