@@ -6,6 +6,7 @@ use strict;
 use overload '""' => \&string;
 
 use List::Util;
+use Storable 'dclone';
 
 # preference libs in same folder over @INC
 use lib '../';
@@ -24,7 +25,7 @@ use constant {
     PROOVREAD_CONSTANT => 120,
 };
 
-our $VERSION = '0.16';
+our $VERSION = '0.16.2';
 
 
 
@@ -677,9 +678,19 @@ Returns a Sam::Seq object.
 
 =cut
 
+# alias for cloning
+*clone = \&new;
+
 sub new{
-	my $class = shift;
+	my $proto = shift;
 	my $self;
+        my $class;
+
+        if ($class = ref $proto) { # clone
+            return bless(dclone($proto), $class);
+        }
+
+        $class = $proto;
 
 	$self = {
 		## defaults
