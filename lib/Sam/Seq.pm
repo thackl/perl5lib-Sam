@@ -1269,81 +1269,35 @@ sub haplo_coverage{
     # compute all variants
     $self->variants;
 
+    # better than looking at each var pos individually, get all "best" variants at once
+
+    my $best = $self->clone; # clone Sam::Seq object - requires dclone
+
+    $best->filter_by_coverage(6); # only keep best aln for each bin
+    $best->variants;
+
+    # compare $self->{vars} ~ $best->{vars}
+    # delta ratios are fine, but do not restrict coverage report to underepresented states
+    #  >> if ($v->[0] ne $drats_max) {...
+
     # parse variants for discriminating spots
     for ( my $i=0; $i<@{$self->{vars}}; $i++) {
         my $v = $self->{vars}[$i];
-        my $f = $self->{freqs}[$i];
-        my $c = $self->{covs}[$i];
-        my $p = $self->{probs}[$i];
+
+        # only consider true variants (>1 state) and purely ATGC states
         next if scalar @$v < 2 || grep{length($_) > 1 || $_ =~ /[^ATGC]/}@$v;
 
-        # we are looking at 5 bins around snp
-        my $bidx = int($i / $self->{bin_size});
-        # don't do it at directly at ends
-        next if $bidx < 3 or $bidx > @{$self->{_bin_alns}}-4;
+        my $p = $self->{probs}[$i];
+        my $b = $best->{vars}[$i][0];
 
-        my @bins = $self->alns_by_bins($bidx-1,$bidx+1);
-        my @best;
-        foreach my $bin (@bins) {
-            next unless @$bin;  # empty bin
-            for (my $j=0; $j<2; $j++) {
-                my $aln = $bin->[$j];
-                next unless $aln;
-                my $o = $i-$aln->pos+1;
-                my $aseq = $aln->seq_aligned;          # best aln
-                next if $o < 0 || $o >= length($aseq); # aln not overlapping snp
-                my $b =  substr($aseq,$o,1);
-                push @best, $b;
-                # # print aln region with snp flanks
-                # print " " x 100, " *\n";
-                # foreach my $aln ( @$bin ) {
-                #     my $aseq = $aln->seq_aligned;
-                #     my $o = $i-$aln->pos+1;
-                #     next if $o < 0 || $o >= length($aseq); # aln not overlapping snp
-                #
-                #     my $b =  substr($aseq,$o,1);
-                #
-                #     my $f1 = substr($aseq,0,$o);
-                #     my $f2 = substr($aseq,$o+1);
-                #     print " " x (100-$o), $f1," ",$b," ",$f2," ",$aln->nscore,"\n" ;
-                # }
-            }
-        }
+        my $j=0;
+        for (;$j<@$v;$j++) { last if $v->[$j] eq $b; }
 
-        next unless @best;      # just to be sure
+        use Data::Dumper;
+        print STDERR "$b: $p->[$j] [@$v : @$p]\n";
+        next;
+        #push @hpl_cov, $fc;
 
-        # orig ratios
-        my %orats;
-        $orats{$v->[$_]} = $p->[$_] for 0..@$v-1;
-
-        # best ratios
-        my %brats;
-        $brats{$_}++ for @best;
-        $brats{$_} = $brats{$_}/@best for keys %brats;
-
-        # delta ratios
-        my %drats;
-        foreach ( keys %orats) {
-            $drats{$_} = exists $brats{$_} ? $brats{$_} / $orats{$_} : 0;
-        }
-        # print "#$i [$c] -------------------------##\n";
-        # print "$_:$orats{$_} " for keys %orats;
-        # print "$_:$brats{$_} " for keys %brats;
-        # print "$_:$drats{$_} " for keys %drats;
-
-        # delta ratios show the winner
-        my $drats_max = (sort{$drats{$b} <=> $drats{$a}}keys %drats)[0];
-        if ($v->[0] ne $drats_max) {
-
-            my $idx;
-            for ($idx=0;$idx<@$v;$idx++) {
-                last if $drats_max eq $v->[$idx];
-            }
-            my $ob = $v->[0];
-            my $fc = $f->[$idx];
-            push @hpl_cov, $fc;
-            # print "$i\t$ob->$drats_max\t$fc\t$c\n";
-        }
     }
 
     return unless @hpl_cov;
