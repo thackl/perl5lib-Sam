@@ -687,7 +687,10 @@ sub new{
         my $class;
 
         if ($class = ref $proto) { # clone
-            return bless(dclone($proto), $class);
+            $proto->{_is} = undef; # can't clone code
+            $self = bless(dclone($proto), $class);
+            $self->is($self->{is}) if $self->{is};
+            return $self;
         }
 
         $class = $proto;
