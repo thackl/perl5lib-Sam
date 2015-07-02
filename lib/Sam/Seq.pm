@@ -25,7 +25,7 @@ use constant {
     PROOVREAD_CONSTANT => 120,
 };
 
-our $VERSION = '0.16.2';
+our $VERSION = '1.0.0';
 
 
 
@@ -859,6 +859,50 @@ sub remove_aln_by_iid{
 }
 
 
+=head2 haplo_consensus
+
+=cut
+
+sub haplo_consensus{
+	my $self = shift;
+        my %p = (
+                 hcrs => [],
+                 ignore_coords => undef,
+                 qual_weighted => 0,
+                 use_ref_qual => 0,
+                 @_
+                );
+
+	$self->_init_state_matrix(
+                                  ignore_coords => $p{ignore_coords},
+                                  qual_weighted => $p{qual_weighted},
+                                  use_ref_qual => $p{use_ref_qual},
+                                 );
+
+	$self->_add_pre_calc_fq(@{$p{hcrs}}) if $p{hcrs};
+
+        # get variants
+        $self->variants(reuse_matrix => 1);
+        $self->penalize_variants();
+        my $hc = $self->haplo_coverage(reuse_matrix => 1);
+        $self->filter_by_coverage($hc) if $hc;
+
+        # recall
+	$self->_init_state_matrix(
+                                  ignore_coords => $p{ignore_coords},
+                                  qual_weighted => $p{qual_weighted},
+                                  use_ref_qual => $p{use_ref_qual},
+                                 );
+        $self->variants(
+            min_prob => 0.2,
+            min_freq => 2,
+        );
+	$self->_haplo_consensus;
+
+	return $self->{con};
+
+}
+
 
 =head2 consensus
 
@@ -889,22 +933,6 @@ sub consensus{
 	return $self->{con};
 }
 
-
-=head2 variants
-
-By default the state matrix is calculated, wether or not it has
- been computed before. Set first parameter to TRUE to prevent
- unneccessary recalculation.
-
-=cut
-
-sub variants{
-	my ($self, $reuse_matrix) = (@_,0);
-	# compute state_matrix if required/wanted
-        $self->_init_state_matrix() if (!$self->{_state_matrix} || !$reuse_matrix);
-
-	return $self->_variants;
-}
 
 =head2 coverage
 
@@ -1253,6 +1281,48 @@ sub filter_by_coverage{
     }
 }
 
+
+=head2 penalize_variants
+
+=cut
+
+sub penalize_variants{
+    my $self = shift;
+    die "Variants not yet called!\n" unless ref $self->{vars} eq 'ARRAY' && @{$self->{vars}};
+    my $var_c_tot=0;
+    my @ref_seq = split(//, $self->ref->seq);
+
+    my $other;
+    foreach my $aid ($self->aln_iids()) {
+        $other++;
+        my $aln = $self->aln_by_iid($aid);
+        my $f = $aln->pos -1;
+        my $seq = $aln->seq_aligned;
+        my $l = length($seq);
+
+        my $var_c = 0;
+        for ( my $i=0; $i<$l; $i++) {
+            my $v = $self->{vars}[$f+$i];
+            #TODO
+            # only consider true variants (>1 state) and purely ATGC states
+            next if scalar @$v < 2 || grep{length($_) > 1 || $_ =~ /[^ATGC]/}@$v;
+            $var_c++ if substr($seq, $i, 1) ne $ref_seq[$f+$i];
+        }
+
+        if ($var_c) {
+            $aln = $self->remove_aln_by_iid($aid);
+            next if $other%2; # remove every second snp aln
+            my $score = $aln->score;
+            $score -= ($var_c * -60);
+            $aln->score($score);
+            $self->add_aln_by_score($aln);
+        }
+        $var_c_tot+=$var_c;
+    }
+    #print STDERR "penalized $var_c_tot SNVs in alignments\n";
+}
+
+
 =head2 haplo_coverage
 
 This method tries to find discriminating SNPs in the state matrix, favouring the
@@ -1267,37 +1337,22 @@ sub haplo_coverage{
     my @hpl_cov;
 
     # compute all variants
-    $self->variants;
+    $self->variants(min_freq => 4);
+    my @ref_seq = split(//, $self->ref->seq);
 
-    # better than looking at each var pos individually, get all "best" variants at once
-
-    my $best = $self->clone; # clone Sam::Seq object - requires dclone
-
-    $best->filter_by_coverage(6); # only keep best aln for each bin
-    $best->variants;
-
-    # compare $self->{vars} ~ $best->{vars}
-    # delta ratios are fine, but do not restrict coverage report to underepresented states
-    #  >> if ($v->[0] ne $drats_max) {...
-
-    # parse variants for discriminating spots
     for ( my $i=0; $i<@{$self->{vars}}; $i++) {
         my $v = $self->{vars}[$i];
 
         # only consider true variants (>1 state) and purely ATGC states
         next if scalar @$v < 2 || grep{length($_) > 1 || $_ =~ /[^ATGC]/}@$v;
 
-        my $p = $self->{probs}[$i];
-        my $b = $best->{vars}[$i][0];
-
-        my $j=0;
-        for (;$j<@$v;$j++) { last if $v->[$j] eq $b; }
-
-        use Data::Dumper;
-        print STDERR "$b: $p->[$j] [@$v : @$p]\n";
-        next;
-        #push @hpl_cov, $fc;
-
+        my $r = $ref_seq[$i];
+        my $fc;
+        for (my $j=0;$j<@$v;$j++) { if ($v->[$j] eq $r){
+            $fc = $self->{freqs}[$i][$j];
+            last;
+        }}
+        push @hpl_cov, $fc;
     }
 
     return unless @hpl_cov;
@@ -1309,7 +1364,6 @@ sub haplo_coverage{
 
     #print STDERR "$self->{id}\t$hpl_cov\t$high_cov\t$self->{len}\t$df\n";
     return $df > 0.00015 ? $hpl_cov : undef;
-
 }
 
 ##------------------------------------------------------------------------##
@@ -1673,6 +1727,62 @@ sub _add_pre_calc_fq{
 }
 
 
+=head2 _haplo_consensus
+
+=cut
+
+sub _haplo_consensus{
+    my $self = shift;
+    my %states_rev = reverse %{$self->{_states}}; # works since values are also unique
+    my $seq = '';
+    my @freqs;
+    my $trace;
+
+    my $vcovs = $self->{covs};
+    my $vvars = $self->{vars};
+    my $vfreqs = $self->{freqs};
+
+    for (my $i=0; $i<$self->len; $i++){
+        # uncovered col
+        unless ($vcovs->[$i]){
+            $seq.= $self->{ref} ? substr($self->{ref}{seq}, $i, 1) : 'n';
+            push @freqs, 0;
+            #$trace.='M';
+            next;
+        }
+        # TODO MaxInsertSize
+
+        my $j = 0;
+        if ($self->{ref} && @{$vvars->[$i]} >1) { # SNVs
+            my $r = substr($self->{ref}{seq}, $i, 1);
+            for (my $k=0; $k<@{$vvars->[$i]};$k++) { # loop through SNVs
+                if ($vvars->[$i][$k] eq $r){ # find first ref matching state
+                    $j=$k;
+                    last;
+                }
+            }
+        }
+
+        #print STDERR "$i\t$vvars->[$i][$j] : @{$vvars->[$i]} @{$vfreqs->[$i]}\n" if $j;
+        $seq.= $vvars->[$i][$j];
+        push @freqs, $vfreqs->[$i][$j];
+
+
+    }
+
+    $self->{con} = Fastq::Seq->new(
+        '@'.$self->{id},
+        $seq,
+        '+',
+        Fastq::Seq->Phreds2Char( [Sam::Seq->Freqs2phreds(@freqs)] , $self->{phred_offset} ),
+        cov => Fastq::Seq->Phreds2Char([@freqs], $self->{phred_offset}),
+        phred_offset => $self->{phred_offset},
+        #trace => $trace,
+        #cigar => Sam::Seq->Trace2cigar($trace),
+    );
+}
+
+
 =head2 _consensus
 
 =cut
@@ -1765,23 +1875,35 @@ sub _consensus{
 }
 
 
+=head2 variants
 
-=head2 _variants
+By default the state matrix is calculated, wether or not it has been computed
+ before. Set C<reuse_matrix => 1> to prevent unneccessary recalculation.
 
 =cut
 
-sub _variants{
+*_variants = \&variants; # backward comp
+
+sub variants{
     my $self = shift;
+    die __PACKAGE__."->verbose: uneven number of options: @_" if @_%2;
+
     my %p = (
         min_prob => 0,
         min_freq => 4,
+        reuse_matrix => 0,
         @_
     );
 
+    # compute state_matrix if required/wanted
+    $self->_init_state_matrix() if (!$self->{_state_matrix} || !$p{reuse_matrix});
 
-    #print Dumper($self->{_state_matrix});
     my @seq;
     my %states_rev = reverse %{$self->{_states}}; # works since values are also unique
+    $self->{covs} = [];
+    $self->{vars} = [];
+    $self->{freqs} = [];
+    $self->{probs} = [];
 
     foreach my $col (@{$self->{_state_matrix}}) {
         # cov
@@ -1818,9 +1940,9 @@ sub _variants{
         }
 
         $k--;
-        push @{$self->{vars}}, $k >= 0 ? [@vars[0..$k]] : ['?'];
-        push @{$self->{freqs}}, $k >= 0 ? [@freqs[0..$k]] : [''];
-        push @{$self->{probs}}, $k >= 0 ? [@probs[0..$k]] : [''];
+        push @{$self->{vars}}, $k >= 0 ? [@vars[0..$k]] : [$vars[0]];
+        push @{$self->{freqs}}, $k >= 0 ? [@freqs[0..$k]] : [$freqs[0]];
+        push @{$self->{probs}}, $k >= 0 ? [@probs[0..$k]] : [$probs[0]];
     }
     # rel freq
 
