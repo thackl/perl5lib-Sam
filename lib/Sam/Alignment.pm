@@ -5,7 +5,7 @@ use strict;
 
 use overload '""' => \&string;
 
-our $VERSION = '1.0.0';
+our $VERSION = '1.1.0';
 
 =head1 NAME
 
@@ -21,11 +21,8 @@ Class for handling sam alignments.
 
   use Sam::Alignment;
 
-  # directly build sam aln object
-  $aln = Sam::Alignment->new();
-
-  # get object from parser
-  $sp = Sam::Parser->new(file => <SAMFILE>);
+  # usually get object from parser
+  $sp = Sam::Parser->new(file => <SAM>);
   $aln = $sp->next_aln;
 
   # get values
@@ -33,19 +30,12 @@ Class for handling sam alignments.
   $aln->raw       # entry raw string
   $aln->opt('XX') # value of optional field with tag 'XX'
 
-  # test alns bit mask
-  $aln->is_paired
-  $aln->is(SAM::Alignment->PAIRED);
-  $aln->is($aln->PAIRED);
-
   use Sam::Alingment ':flags'
-
-  $sam_aln_obj->is(PAIRED);
 
   # true if read is paired and unmapped
   $aln->is(PAIRED, UNMAPPED);
   # true if reads is either duplicate or bad quality
-  $aln->is(DUPLICATE & BAD_QUALITY);
+  $aln->is(PCR_DUPLICATE & VENDOR_FAIL);
 
 =head1 Class ATTRIBUTES
 
@@ -80,12 +70,9 @@ sub InvertScores{
 Create a sam alignment object. Takes either a sam entry as as string (one
  line of a sam file) or a key => value representation of the sam fields
  C<qname flag rname pos mapq cigar rnext pnext tlen seq qual opt>.
- While the first eleven fields are regular, C<opt> contains a string of all
- the optional fields added to the line.
 
 Returns a sam alignment object. For more informations on the sam format see
  L<http://samtools.sourceforge.net/SAM1.pdf>.
-
 
 =cut
 
@@ -117,11 +104,14 @@ sub new{
 }
 
 
-=head1 Accessor METHODS
+=head1 Object METHODS
 
 =head2 qname, flag, rname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual
 
 Get/Set ...
+
+  my $id = $aln->qname();
+  $aln->seq("AATTATA");
 
 =cut
 
@@ -152,100 +142,102 @@ sub _init_accessors{
 }
 
 
-=head1 Object METHODS
+=head2 string
+
+Get stringified alignment.
 
 =cut
 
-=head2 is / is_<property>
+sub string{
+    my ($self) = @_;
+    my $s = join("\t", @$self{@ATTR_SCALAR[0..$#ATTR_SCALAR-1]});
+    $s.= "\t".$self->{opt} if $self->{opt};
+    return $s."\n";
+}
 
-Test generic alignment properties encoded in the sam bitmask flag.
- Takes bitmasks, returns 1 or 0 accordingly.
- If you test multipe bitmasks, there are two different things you  might
- want to see. a) all bitmasks have to match (AND linked) or b) at
- least one bitmask has to match (OR linked). The achieve a) simply provide
- the bitmasks as array to the method. For b) provide combined bitmasks
- C<MASK_1or2 = (MASK_1 & MASK_2)>.
+=head2 is
 
-Named bitmask (property masks) for specific properties are provided for
- better readability and consistency. The usage of these constants instead of
- actual bitmasks is recommended. The properties are read-only constants.
- They can be exported individually by name or all at once with
- C<use Sam::Alignment ':flags'>
-
-  #property => bitmask value
-  PAIRED => 0x1,
-  MAPPED_BOTH => 0x2,
-  UNMAPPED => 0x4,
-  SECOND_READ_UNMAPPED => 0x8,
-  REVERSE_COMPLEMENT => 0x10,
-  SECOND_READ_REVERSE_COMPLEMENT => 0x20,
-  FIRST => 0x40,
-  SECOND => 0x80,
-  SECONDARY_ALIGNMENT => 0x100,
-  BAD_QUALITY => 0x200,
-  DUPLICATE => 0x400
+Test flag encoded alignment properties. Takes bitmasks, returns 1 or 0
+ accordingly. For OR testing of multiple bitmasks, provide maskes as array. For
+ AND testing of bitmasks combine bitmasks C<(MASK_1 & MASK_2)>. Export named
+ bitmasks with C<use Sam::Alignment ':flags'>
 
   # Property bitmasks
-  $sam_aln_obj -> is(SAM::Alignment->PAIRED);
-  $sam_aln_obj -> is($sam_aln_obj->PAIRED);
   use Sam::Alingment ':flags'
-  $sam_aln_obj -> is(PAIRED);
 
   # true if read is paired and unmapped
   is(PAIRED, UNMAPPED);
   # true if reads is either duplicate or bad quality
   is(DUPLICATE & BAD_QUALITY);
 
-The C<is_<property>> methods are convenience functions, mainly equivalent to
- C<is(<property>)>. The main advantage is that apart from 0 and 1 they
- return undef in case the test itself does not make sence, that is if a
- unpaired read is tested for paired read properties like
- C<FIRST, SECOND, BOTH_MAPPED> or a non-first read is tested for
- C<SECOND_READ_UNMAPPED, SECOND_READ_REVERSE_COMPLEMENT>.
-
-  is_paired()
-  is_mapped_both()
-  is_first()
-  is_second()
-  is_unmapped()
-  is_second_read_unmapped()
-  is_reverse_complement()
-  is_second_read_reverse_complement()
-  is_secondary_alignment()
-  is_bad_quality()
-  is_duplicate()
+  #property => bitmask value
+  PAIRED =>          0x1
+  PROPER_PAIR =>     0x2
+  UNMAP =>           0x4
+  MUNMAP =>          0x8
+  REVERSE =>        0x10
+  MREVERSE =>       0x20
+  READ1 =>          0x40
+  READ2 =>          0x80
+  SECONDARY =>     0x100
+  QCFAIL =>        0x200
+  DUP =>           0x400
+  SUPPLEMENTARY => 0x800
 
 =cut
 
+# deprecated
+# The C<is_<property>> methods are convenience functions, mainly equivalent to
+#  C<is(<property>)>. The main advantage is that apart from 0 and 1 they
+#  return undef in case the test itself does not make sence, that is if a
+#  unpaired read is tested for paired read properties like
+#  C<FIRST, SECOND, BOTH_MAPPED> or a non-first read is tested for
+#  C<SECOND_READ_UNMAPPED, SECOND_READ_REVERSE_COMPLEMENT>.
+#
+#   is_paired()
+#   is_mapped_both()
+#   is_first()
+#   is_second()
+#   is_unmapped()
+#   is_second_read_unmapped()
+#   is_reverse_complement()
+#   is_second_read_reverse_complement()
+#   is_secondary_alignment()
+#   is_bad_quality()
+#   is_duplicate()
+
+
 our @flag_names = qw(
 	PAIRED
-	MAPPED_BOTH
-	UNMAPPED
-	SECOND_READ_UNMAPPED
-	REVERSE_COMPLEMENT
-	SECOND_READ_REVERSE_COMPLEMENT
-	FIRST
-	SECOND
-	SECONDARY_ALIGNMENT
-	BAD_QUALITY
-	DUPLICATE
+	PROPER_PAIR           MAPPED_BOTH
+        UNMAP                 UNMAPPED
+	MUNMAP                SECOND_READ_UNMAPPED
+	REVERSE               REVERSE_COMPLEMENT
+        MREVERSE              SECOND_READ_REVERSE_COMPLEMENT
+	READ1                 FIRST
+	READ2                 SECOND
+	SECONDARY             SECONDARY_ALIGNMENT
+	QCFAIL                BAD_QUALITY
+	DUP                   DUPLICATE
+        SUPPLEMENTARY
 );
 
 # declare property flags as constants
 use constant {
-	PAIRED => 0x1,
-	MAPPED_BOTH => 0x2,
-	UNMAPPED => 0x4,
-	SECOND_READ_UNMAPPED => 0x8,
-	REVERSE_COMPLEMENT => 0x10,
-	SECOND_READ_REVERSE_COMPLEMENT => 0x20,
-	FIRST => 0x40,
-	SECOND => 0x80,
-	SECONDARY_ALIGNMENT => 0x100,
-	BAD_QUALITY => 0x200,
-	DUPLICATE => 0x400,
-        # drives ncscoring penality for short alns, see _ncscore for details
-        NCSCORE_CONSTANT => 40,
+    PAIRED => 0x1,
+    PROPER_PAIR => 0x2,     MAPPED_BOTH => 0x2,
+    UNMAP => 0x4,           UNMAPPED => 0x4,
+    MUNMAP => 0x8,          SECOND_READ_UNMAPPED => 0x8,
+    REVERSE => 0x10,        REVERSE_COMPLEMENT => 0x10,
+    MREVERSE => 0x20,       SECOND_READ_REVERSE_COMPLEMENT => 0x20,
+    READ1 => 0x40,          FIRST => 0x40,
+    READ2 => 0x80,          SECOND => 0x80,
+    SECONDARY => 0x100,     SECONDARY_ALIGNMENT => 0x100,
+    QCFAIL => 0x200,        BAD_QUALITY => 0x200,
+    DUP => 0x400,           DUPLICATE => 0x400,
+    SUPPLEMENTARY => 0x800,
+    # drives ncscoring penality for short alns, see _ncscore for details
+    NCSCORE_CONSTANT => 40,
 };
 
 
@@ -320,20 +312,6 @@ sub is_bad_quality{
 sub is_duplicate{
 	my $self = shift;
 	return $self->is(DUPLICATE);
-}
-
-
-=head2 string
-
-Get stringified alignment.
-
-=cut
-
-sub string{
-    my ($self) = @_;
-    my $s = join("\t", @$self{@ATTR_SCALAR[0..$#ATTR_SCALAR-1]});
-    $s.= "\t".$self->{opt} if $self->{opt};
-    return $s."\n";
 }
 
 
@@ -476,9 +454,11 @@ sub seq_aligned{
 }
 
 
-=head2 score/nscore/ncscore
+=head2 score, nscore, ncscore
 
-Get score (AS:i) / nscore (score/length) / ncscore (score/length * CF).
+  score:    AS:i
+  nscore:   score/length
+  ncscore:  score/length * CF
 
 If $InvertScore is true, scores are multipled by -1. That way one can work
 with/filter scores where originally smaller values are better, e.g. blasr
@@ -541,6 +521,8 @@ sub _reset_cached_values{
 }
 
 =head1 Aliases
+
+=head2 raw = string
 
 For backward compatibility or lazyness.
 
