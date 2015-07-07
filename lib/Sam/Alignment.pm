@@ -5,14 +5,11 @@ use strict;
 
 use overload '""' => \&string;
 
-# preference libs in same folder over @INC
-use lib '../';
-
-our $VERSION = '0.10';
+our $VERSION = '1.0.0';
 
 =head1 NAME
 
-Sam::Alignment.pm
+Sam::Alignment
 
 =head1 DESCRIPTION
 
@@ -50,17 +47,7 @@ Class for handling sam alignments.
   # true if reads is either duplicate or bad quality
   $aln->is(DUPLICATE & BAD_QUALITY);
 
-=cut
-
-# alias for backward comp.
-*raw = \&string;
-
 =head1 Class ATTRIBUTES
-
-=cut
-
-our @_Fieldsnames = qw(qname flag rname pos mapq cigar rnext pnext tlen seq qual opt);
-
 
 =head2 $InvertScores;
 
@@ -102,6 +89,11 @@ Returns a sam alignment object. For more informations on the sam format see
 
 =cut
 
+my @ATTR_SCALAR = qw(qname flag rname pos mapq cigar rnext pnext tlen seq qual opt);
+
+my %SELF;
+@SELF{@ATTR_SCALAR} = (undef) x scalar @ATTR_SCALAR;
+
 sub new{
 	my $class = shift;
 	my $self;
@@ -110,30 +102,55 @@ sub new{
 		my $sam = $_[0];
 		chomp($sam);
 		my %sam;
-		@sam{@Sam::Alignment::_Fieldsnames} = split("\t",$sam, 12);
+		@sam{@ATTR_SCALAR} = split("\t",$sam, 12);
 		$self = \%sam;
 	}else{ # input is key -> hash structure
-		$self = {
-			qname => undef,
-			flag => undef,
-			rname => undef,
-			'pos' => undef,
-			mapq => undef,
-			cigar => undef,
-			rnext => undef,
-			pnext => undef,
-			tlen => undef,
-			seq => undef,
-			qual => undef,
-			opt => undef,
-			@_,
-			_opt => undef
-		};
+            $self = {
+                %SELF,
+                @_,
+                _opt => undef
+            };
 	}
 	# overwrite defaults
 
 	return bless $self, $class;
 }
+
+
+=head1 Accessor METHODS
+
+=head2 qname, flag, rname, pos, mapq, cigar, rnext, pnext, tlen, seq, qual
+
+Get/Set ...
+
+=cut
+
+# called at eof
+sub _init_accessors{
+    no strict 'refs';
+
+    # generate accessors for cache affecting attributes
+    foreach my $attr ( qw(pos cigar tlen seq) ) {
+        next if $_[0]->can($attr); # don't overwrite explicitly created subs
+        *{__PACKAGE__ . "::$attr"} = sub {
+            if (@_ == 2){
+                $_[0]->_reset_cached_values();
+                $_[0]->{$attr} = $_[1];
+            }
+            return $_[0]->{$attr};
+        }
+    }
+
+    # generate simple accessors closure style
+    foreach my $attr ( @ATTR_SCALAR ) {
+        next if $_[0]->can($attr); # don't overwrite explicitly created subs
+        *{__PACKAGE__ . "::$attr"} = sub {
+            $_[0]->{$attr} = $_[1] if @_ == 2;
+            return $_[0]->{$attr};
+        }
+    }
+}
+
 
 =head1 Object METHODS
 
@@ -305,166 +322,6 @@ sub is_duplicate{
 	return $self->is(DUPLICATE);
 }
 
-=head1 Accessor METHODS
-
-=head2 qname
-
-Get/Set the qname.
-
-=cut
-
-sub qname{
-	my ($self, $qname, $force) = @_;
-        if(defined $qname || $force){
-            $self->{qname} = $qname;
-        }
-	return $self->{qname};
-}
-
-=head2 flag
-
-Get/Set the flag.
-
-=cut
-
-sub flag{
-	my ($self, $flag, $force) = @_;
-        if(defined $flag || $force){
-            $self->{flag} = $flag;
-        }
-	return $self->{flag};
-}
-
-=head2 rname
-
-Get/Set the rname.
-
-=cut
-
-sub rname{
-	my ($self, $rname, $force) = @_;
-        if(defined $rname || $force){
-            $self->{rname} = $rname;
-        }
-	return $self->{rname};
-}
-
-=head2 pos
-
-Get/Set the pos.
-
-=cut
-
-sub pos{
-	my ($self, $pos, $force) = @_;
-        if(defined $pos || $force){
-            $self->_reset_cached_values();
-            $self->{pos} = $pos;
-        }
-	return $self->{pos};
-}
-
-=head2 mapq
-
-Get/Set the mapq.
-
-=cut
-
-sub mapq{
-	my ($self, $mapq, $force) = @_;
-        if(defined $mapq || $force){
-            $self->{mapq} = $mapq;
-        }
-	return $self->{mapq};
-}
-
-=head2 cigar
-
-Get/Set the cigar.
-
-=cut
-
-sub cigar{
-	my ($self, $cigar, $force) = @_;
-        if(defined $cigar || $force){
-            $self->_reset_cached_values();
-            $self->{cigar} = $cigar;
-        }
-	return $self->{cigar};
-}
-
-=head2 rnext
-
-Get/Set the rnext.
-
-=cut
-
-sub rnext{
-	my ($self, $rnext, $force) = @_;
-        if(defined $rnext || $force){
-            $self->{rnext} = $rnext;
-        }
-	return $self->{rnext};
-}
-
-=head2 pnext
-
-Get/Set the pnext.
-
-=cut
-
-sub pnext{
-	my ($self, $pnext, $force) = @_;
-        if(defined $pnext || $force){
-            $self->{pnext} = $pnext;
-        }
-	return $self->{pnext};
-}
-
-=head2 tlen
-
-Get/Set the tlen.
-
-=cut
-
-sub tlen{
-	my ($self, $tlen, $force) = @_;
-        if(defined $tlen || $force){
-            $self->_reset_cached_values();
-            $self->{tlen} = $tlen;
-        }
-	return $self->{tlen};
-}
-
-=head2 seq
-
-Get/Set the seq.
-
-=cut
-
-sub seq{
-	my ($self, $seq, $force) = @_;
-        if(defined $seq || $force){
-            $self->_reset_cached_values();
-            $self->{seq} = $seq;
-        }
-	return $self->{seq};
-}
-
-=head2 qual
-
-Get/Set the seq.
-
-=cut
-
-sub qual{
-	my ($self, $qual, $force) = @_;
-        if(defined $qual || $force){
-            $self->{qual} = $qual;
-        }
-	return $self->{qual};
-}
-
 
 =head2 string
 
@@ -474,7 +331,7 @@ Get stringified alignment.
 
 sub string{
     my ($self) = @_;
-    my $s = join("\t", @$self{qw(qname flag rname pos mapq cigar rnext pnext tlen seq qual)});
+    my $s = join("\t", @$self{@ATTR_SCALAR[0..$#ATTR_SCALAR-1]});
     $s.= "\t".$self->{opt} if $self->{opt};
     return $s."\n";
 }
@@ -683,12 +540,25 @@ sub _reset_cached_values{
     $_[0]->{full_length} = undef;
 }
 
+=head1 Aliases
+
+For backward compatibility or lazyness.
+
+=cut
+
+{ # alias for backward comp.
+    no warnings 'once';
+    *raw = \&string;
+}
+
+# init auto-accessors at eof to prevent any overwrites
+__PACKAGE__->_init_accessors();
+
+
 =head1 AUTHOR
 
 Thomas Hackl S<thomas.hackl@uni-wuerzburg.de>
 
 =cut
-
-
 
 1;
