@@ -8,7 +8,7 @@ use lib '../';
 
 use Sam::Alignment qw(:flags);
 
-our $VERSION = '0.11';
+our $VERSION = '1.0.0';
 
 =head1 NAME 
 
@@ -64,86 +64,6 @@ Parser module for SAM format files.
 
 =cut
 
-=head1 CHANGELOG
-
-=over
-
-=head2 0.11
-
-=over
-
-=item [Change] Preference libs in same folder over @INC
-
-=item [Change] Added svn:keywords
-
-=back
-
-=item 0.10 [Thomas Hackl 2012-10-25]
-
-Renamed Method. C<< $sp->append_tell() >> is now simply C<< $sp->tell() >>.
-
-=item 0.09 [Thomas Hackl 2012-10-25]
-
-Added C<< $sp->seek >> method.
-
-=item 0.08 [Thomas Hackl 2012-10-25]
-
-C<< $sp->next_header_line >> in LIST context now stores the raw line under 
- the key C<raw>.
-
-=item 0.07 [Thomas Hackl 2012-10-24]
-
-Performance upgrade. C<< _is >> tests are now not always performed, but only
- after testing if routine is defined.
-
-=item 0.06 [Thomas Hackl 2012-10-24]
-
-Added context awareness to C<< $sp->next_header_line >>. Returns now either
- the entire line as string or a LIST of splited tag => value pairs.
-
-=item 0.05
-
-Added C<< $sp->aln_by_pos >> to retrieve aln based on file position.
-
-=item 0.04
-
-Added explicit read mode C<< < >> to the file open statement. This
- allows to use the parser on STRINGREFS as if they where files.
-
-=item 0.03
-
-Renamed C<get_next_> to C<next_>, C<goto_> to C<seek_>.
-
-Bugfixed eval part of C<is()> method. Object before method call was missing.
-
-=item 0.02
-
-Added C<_line_buffer> to object. This allows parsing without C<seek> and 
- therefore allows - besides reading from files - reading from STDIN.
-
-Added header parsing support.
-
-=item 0.01
-
-Initial Parser module. Provides Constructor, generic accessor, individual
- and paired mode alignment parsing methods and conditional C<is> filtering 
- of alignments
- 
-
-=back
-
-=cut
-
-=head1 TODO
-
-=over
-
-=item Tests
-
-=back
-
-=cut
-
 =head1 Constructor METHOD
 
 =head2 new
@@ -179,20 +99,19 @@ sub new{
 		_is => undef,
 	};
 
+	bless $self, $class;
+        
 	# open file in read/write mode
-	if ($self->{file}){
+	if ($self->file){
 		my $fh;
-		open ( $fh , $self->{mode}, $self->{file}) or die sprintf("%s: %s, %s",(caller 0)[3],$self->{file}, $!);
+		open ( $fh , $self->{mode}, $self->file) or die sprintf("%s: %s, %s",(caller 0)[3],$self->file, $!);
 		$self->{fh} = $fh;
 	}
-
-	bless $self, $class;
 	
 	# prepare _is test routine
 	$self->is($self->{is}) if $self->{is};
 	
 	return $self;
-	
 }
 
 sub DESTROY{
@@ -576,7 +495,20 @@ sub append_tell{
 
 =head1 Accessor METHODS
 
+=head2 file
+
+Get/set SAM/BAM file.
+
 =cut
+
+sub file{
+    my ($self, $file) = @_;
+    if (defined $file) {
+        $self->{file} = $file;
+        $self->file2fh();
+    }
+    return $self->{file};
+}
 
 =head2 fh
 
