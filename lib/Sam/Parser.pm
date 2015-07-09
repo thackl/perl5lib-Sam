@@ -552,7 +552,25 @@ sub file2fh{
         open($fh , $self->{mode}, $self->file) or die sprintf("%s: %s, %s",(caller 0)[3],$self->file, $!);
         $self->{_is_bam} = 0;
     }
+
+    die (((caller 0)[3]).": region only works on BAM files") if $self->region && !$self->{_is_bam};
+
     $self->fh($fh);
+}
+
+=head2 region
+
+Get/set region. Only works with BAM files.
+
+=cut
+
+sub region{
+    my ($self, $region) = @_;
+    if (@_>1) {
+        $self->{region} = $region;
+        $self->file2fh; # update fh
+    }
+    return $self->{region};
 }
 
 =head2 is
