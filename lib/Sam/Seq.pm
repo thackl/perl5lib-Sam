@@ -3,15 +3,16 @@ package Sam::Seq;
 use warnings;
 use strict;
 
-use overload '""' => \&string;
+use overload
+    'bool' => sub{1},
+    '""' => \&string;
+
 
 use List::Util;
 use Storable 'dclone';
 
-use Verbose;
-
-use Sam::Parser;
-use Sam::Alignment 0.10 ':flags';
+use Sam::Parser 1.2.0;
+use Sam::Alignment 1.1.1 ':flags';
 
 use Fastq::Seq;
 use Fasta::Seq;
