@@ -8,9 +8,6 @@ use overload '""' => \&string;
 use List::Util;
 use Storable 'dclone';
 
-# preference libs in same folder over @INC
-use lib '../';
-
 use Verbose;
 
 use Sam::Parser;
