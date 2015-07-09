@@ -82,7 +82,10 @@ Initialize a sam parser object. Takes parameters in key => value format.
 
 =cut
 
-my @ATTR_SCALAR = qw(file fh is mode samtools_path samtools region);
+my @ATTR_SCALAR = qw(file fh is mode
+                     samtools_path samtools region
+                     _is_bam _idxstats_fh _idxstats
+                );
 
 my %SELF;
 @SELF{@ATTR_SCALAR} = (undef) x scalar @ATTR_SCALAR;
@@ -92,16 +95,17 @@ sub new{
 	
 	my $self = {
             %SELF,
-		# defaults
-		mode => '<',
-                samtools => 'samtools',
-		# overwrite defaults
-		@_,
-		# protected
-		_line_buffer => undef,
-		_aln_section => undef,
-		_is => undef,
-                _is_bam => undef,
+            # defaults
+            mode => '<',
+            samtools => 'samtools',
+            # overwrite defaults
+            @_,
+            # protected
+            _line_buffer => undef,
+            _aln_section => undef,
+            _is => undef,
+            _is_bam => undef,
+            _idxstats_fh => undef,
 	};
 
 	bless $self, $class;
@@ -123,6 +127,7 @@ sub DESTROY{
 	# just to be sure :D
 	my $self = shift;
 	close $self->fh if $self->fh;
+	close $self->_idxstats_fh if $self->_idxstats_fh;
 }
 
 
@@ -321,6 +326,51 @@ sub next_pair_single{
 	}
 	#eof
 	return;	
+}
+
+=head2 next_seq
+
+Return next Sam::Seq object. Only works with BAM.
+
+=cut
+
+sub next_seq{
+    my ($self) = @_;
+    die (((caller 0)[3]).": only works on BAM files\n") unless $self->_is_bam;
+
+    my ($id, $len);
+    if ($self->region){
+        ($id = $self->region) =~ s/(:([0-9,]+)|:([0-9,]+-[0-9,]+))$//;
+        $len = ($self->idxstat($id))[1];
+    }else {
+        ($id, $len) = $self->next_idxstat;
+        ($id, $len) = $self->next_idxstat if $id eq "*"; # dont look at unmapped
+    }
+
+    return unless defined($id);
+    my $ss = Sam::Seq->new(id => $id, len => $len);
+
+    my $sp = Sam::Parser->new(file => $self->file, region => $id);
+    while ( my $aln = $sp->next_aln ) {
+        $ss->add_aln_by_score($aln);
+    }
+
+    return $ss;
+}
+
+=head2 next_idxstat
+
+Read idxstats. Returns LIST (id, len, #reads mapped, #reads unmapped).
+
+=cut
+
+sub next_idxstat{
+    my ($self) = @_;
+    die (((caller 0)[3]).": only works on BAM files\n") unless $self->_is_bam;
+    my $s = readline($self->_idxstats_fh);
+    return unless defined $s;
+    chomp($s);
+    return split("\t", $s)
 }
 
 
@@ -542,18 +592,22 @@ sub file{
 sub file2fh{
     my ($self) = @_;
     my $fh;
-    print STDERR $self->file,"BAM\n";
+
     if ($self->file =~ /\.bam$/i) {
         die "reading (<) is currently the only supported mode for BAM files" unless $self->{mode} eq '<';
         my $cmd = $self->samtools." view ".$self->file.($self->region ? " ".$self->region : "")." |";
         open($fh, $cmd) or die (((caller 0)[3]).": $!\n$cmd\n");
-        $self->{_is_bam} = 1;
+        $self->_is_bam(1);
+
+        my $idxstats_cmd = $self->samtools." idxstats ".$self->file." |";
+        open($self->{_idxstats_fh}, $idxstats_cmd) or die (((caller 0)[3]).": $!\n$idxstats_cmd\n");
+
     }else{
         open($fh , $self->{mode}, $self->file) or die sprintf("%s: %s, %s",(caller 0)[3],$self->file, $!);
-        $self->{_is_bam} = 0;
+        $self->_is_bam(0);
     }
 
-    die (((caller 0)[3]).": region only works on BAM files") if $self->region && !$self->{_is_bam};
+    die (((caller 0)[3]).": region only works on BAM files") if $self->region && !$self->_is_bam;
 
     $self->fh($fh);
 }
@@ -571,6 +625,31 @@ sub region{
         $self->file2fh; # update fh
     }
     return $self->{region};
+}
+
+=head2 idxstat
+
+Get idxstat for specific ID. Parses and caches idxstats.
+
+=cut
+
+sub idxstat{
+    my ($self, $id) = @_;
+
+    unless ( $self->_idxstats ) {
+        my $idxstats_cmd = $self->samtools." idxstats ".$self->file." |";
+        open(IDX, $idxstats_cmd) or die (((caller 0)[3]).": $!\n$idxstats_cmd\n");
+        $self->{_idxstats} = {};
+        while (defined(<IDX>)) {
+            chomp;
+            my (@s) = split("\t", $_);
+            $self->{_idxstats}{$s[0]} = \@s;
+        }
+        close IDX;
+    }
+
+    die "ID \"$id\" doesn't exists in bam index" unless exists $self->_idxstats->{$id};
+    return @{$self->_idxstats->{$id}};
 }
 
 =head2 is
