@@ -8,7 +8,7 @@ use lib '../';
 
 use Sam::Alignment qw(:flags);
 
-our $VERSION = '1.0.0';
+our $VERSION = '1.1.0';
 
 =head1 NAME 
 
@@ -82,32 +82,37 @@ Initialize a sam parser object. Takes parameters in key => value format.
 
 =cut
 
+my @ATTR_SCALAR = qw(file fh is mode samtools_path samtools region);
+
+my %SELF;
+@SELF{@ATTR_SCALAR} = (undef) x scalar @ATTR_SCALAR;
+
 sub new{
 	my $class = shift;
 	
 	my $self = {
+            %SELF,
 		# defaults
-		fh => \*STDIN,
-		file => undef,
-		is => undef,
 		mode => '<',
+                samtools => 'samtools',
 		# overwrite defaults
 		@_,
 		# protected
 		_line_buffer => undef,
 		_aln_section => undef,
 		_is => undef,
+                _is_bam => undef,
 	};
 
 	bless $self, $class;
         
 	# open file in read/write mode
-	if ($self->file){
-		my $fh;
-		open ( $fh , $self->{mode}, $self->file) or die sprintf("%s: %s, %s",(caller 0)[3],$self->file, $!);
-		$self->{fh} = $fh;
-	}
-	
+        die "Either file or fh required\n" if ($self->file && $self->fh);
+        $self->fh(\*STDIN) if (!$self->file && !$self->fh);
+	$self->file2fh if $self->file;
+
+        $self->samtools(join("/", grep{$_}($self->samtools_path, $self->samtools)));
+
 	# prepare _is test routine
 	$self->is($self->{is}) if $self->{is};
 	
@@ -133,6 +138,26 @@ sub DESTROY{
 =head1 Object METHODS
 
 =cut
+
+=head2 fh, mode, samtools, samtools_path
+
+Get/set ...
+
+=cut
+
+sub _init_accessors{
+    no strict 'refs';
+
+    # generate simple accessors closure style
+    foreach my $attr ( @ATTR_SCALAR ) {
+        next if $_[0]->can($attr); # don't overwrite explicitly created subs
+        *{__PACKAGE__ . "::$attr"} = sub {
+            $_[0]->{$attr} = $_[1] if @_ == 2;
+            return $_[0]->{$attr};
+        }
+    }
+}
+
 
 =head2 next_aln
 
@@ -505,23 +530,30 @@ sub file{
     my ($self, $file) = @_;
     if (defined $file) {
         $self->{file} = $file;
-        $self->file2fh();
+        $self->file2fh(); # update filehandle
     }
     return $self->{file};
 }
 
-=head2 fh
-
-Get/Set the file handle.
+=head2 file2fh
 
 =cut
 
-sub fh{
-	my ($self, $fh) = @_;
-	$self->{fh} = $fh if $fh;
-	return $self->{fh};
+sub file2fh{
+    my ($self) = @_;
+    my $fh;
+    print STDERR $self->file,"BAM\n";
+    if ($self->file =~ /\.bam$/i) {
+        die "reading (<) is currently the only supported mode for BAM files" unless $self->{mode} eq '<';
+        my $cmd = $self->samtools." view ".$self->file.($self->region ? " ".$self->region : "")." |";
+        open($fh, $cmd) or die (((caller 0)[3]).": $!\n$cmd\n");
+        $self->{_is_bam} = 1;
+    }else{
+        open($fh , $self->{mode}, $self->file) or die sprintf("%s: %s, %s",(caller 0)[3],$self->file, $!);
+        $self->{_is_bam} = 0;
+    }
+    $self->fh($fh);
 }
-
 
 =head2 is
 
@@ -548,9 +580,7 @@ The test routine is executed with the parameters C<$parser_obj, $aln_obj>
   
   # deactivate testing
   my $sp->is(0);
-  
-  
-  
+
 =cut
 
 sub is{
@@ -569,6 +599,8 @@ sub is{
 	return $self->{_is};
 }
 
+# init closure accessors
+__PACKAGE__->_init_accessors();
 
 =head1 AUTHOR
 
