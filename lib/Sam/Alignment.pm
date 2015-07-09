@@ -3,9 +3,11 @@ package Sam::Alignment;
 use warnings;
 use strict;
 
-use overload '""' => \&string;
+use overload
+    'bool' => sub{1},
+    '""' => \&string;
 
-our $VERSION = '1.1.0';
+our $VERSION = '1.1.1';
 
 =head1 NAME
 
