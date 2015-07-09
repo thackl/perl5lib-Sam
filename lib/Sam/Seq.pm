@@ -658,14 +658,6 @@ Returns a Sam::Seq object.
                           #  consensus calling, ARRAY of Tuples (start, offset)
   max_coverage => 50,     # assumed maximum coverage value for consensus
                           #  quality value calculation
-  sam => undef,           # associate with a Sam::Parser object, only an
-                          #  index positions to this file will be stored
-                          #  in _aln, data is assumed to be stored in this
-                          #  file at respective position and will be
-                          #  retieved by reading from the Sam::Parser at
-                          #  this position
-                          # default no file -> everything in ram, _aln
-                          #  contains real Sam::Alignment objects.
   is => undef,            # see Sam::Parser->is()
 
   bin_size => $Sam::Seq::BinSize,
@@ -698,14 +690,6 @@ sub new{
 		len => undef,			# length of the reference sequence, required
 		ref => undef,			# reference seq object, Fasta::Seq or Fastq::Seq
 		con => undef,			# consensus seq, Fastq::Seq (+cov)
-		sam => undef,			# associate with a Sam::Parser object, only an
-								#  index positions to this file will be stored
-								#  in _aln, data is assumed to be stored in this
-								#  file at respective position and will be
-								#  retieved by reading from the Sam::Parser at
-								#  this position
-								# default no file -> everything in ram, _aln
-								#  contains real Sam::Alignment objects.
 		max_coverage => $MaxCoverage,
 		bin_size => $BinSize,
 		bin_max_bases => $BinSize * $MaxCoverage,
@@ -809,8 +793,7 @@ sub add_aln_by_score{
 
 =head2 add_aln
 
-Add a Sam::Alignment to Sam::Seq. If Sam::Seq->sam is set, it writes
- and stores the file position, else it stores the actual Sam::Alignment.
+Add a Sam::Alignment to Sam::Seq.
 
 =cut
 
@@ -818,9 +801,7 @@ Add a Sam::Alignment to Sam::Seq. If Sam::Seq->sam is set, it writes
 sub add_aln{
 	my ($self, $aln) = @_;
 
-	$self->{_alns}{++$self->{_aln_idc}} = $self->{sam}
-		? $self->{sam}->append_tell
-		: $aln;
+	$self->{_alns}{++$self->{_aln_idc}} = $aln;
 
 	return $self->{_aln_idc};
 }
@@ -1473,22 +1454,12 @@ Returns number of Sam::Alignments of the Sam::Seq in scalar context, a list
 sub alns{
 	my ($self, $sorted_by_pos) = @_;
 	wantarray || return scalar keys %{$self->{_alns}};
-	if($self->{sam}){
-		# get indices from _aln and retrieve objects from parser
-		if($sorted_by_pos){
-			return sort{ $a->{'pos'} <=> $b->{'pos'} } map{ $self->{sam}->aln_by_pos($_) }values %{$self->{_alns}};
-		}else{
-			return map{ $self->{sam}->aln_by_pos($_ ) }values %{$self->{_alns}};
-		}
-	}else{
-		# return objects from _aln
-		if($sorted_by_pos){
-			return sort{ $a->{'pos'} <=> $b->{'pos'} } values %{$self->{_alns}};
-		}else{
-			return values %{$self->{_alns}};
-		}
-
-	}
+        # return objects from _aln
+        if($sorted_by_pos){
+            return sort{ $a->{'pos'} <=> $b->{'pos'} } values %{$self->{_alns}};
+        }else{
+            return values %{$self->{_alns}};
+        }
 }
 
 
@@ -1505,26 +1476,12 @@ Returns a list of all Sam::Alignments internal IDS (iid). Default order is
 sub aln_iids{
 	my ($self, $sorted_by_pos) = @_;
 	wantarray || return scalar keys %{$self->{_alns}};
-	if($self->{sam}){
-		# get indices from _aln and retrieve objects from parser
-		if($sorted_by_pos){
-                    my %pos;
-                    while (my ($k, $v) = each %{$self->{_alns}}) {
-                        $pos{$k} = $self->{sam}->aln_by_pos($v)
-                    }
-                    return sort{ $pos{$a} <=> $pos{$b} } keys %pos;
-		}else{
-                    return keys %{$self->{_alns}};
-		}
-	}else{
-		# return objects from _aln
-		if($sorted_by_pos){
-			return sort{ $self->{_alns}{$a}{pos} <=> $self->{_alns}{$b}{pos} } keys %{$self->{_alns}};
-		}else{
-			return keys %{$self->{_alns}};
-		}
-
-	}
+        # return objects from _aln
+        if($sorted_by_pos){
+            return sort{ $self->{_alns}{$a}{pos} <=> $self->{_alns}{$b}{pos} } keys %{$self->{_alns}};
+        }else{
+            return keys %{$self->{_alns}};
+        }
 }
 
 
@@ -1554,11 +1511,7 @@ sub alns_by_bins{
 	$to = @$alns-1 unless defined $to;
 	my @bins;
 	for(my $i=$from; $i <= $to; $i++ ){
-		push @bins, [map{
-			$self->{sam}
-				? $self->{sam}->aln_by_pos( $self->{_alns}{$_} )
-				: $self->{_alns}{$_};
-		}@{$alns->[$i]}];
+		push @bins, [map{ $self->{_alns}{$_}; }@{$alns->[$i]}];
 	};
 
 
