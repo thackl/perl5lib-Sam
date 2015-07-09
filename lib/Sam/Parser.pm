@@ -3,12 +3,9 @@ package Sam::Parser;
 use warnings;
 use strict;
 
-# preference libs in same folder over @INC
-use lib '../';
-
 use Sam::Alignment qw(:flags);
 
-our $VERSION = '1.1.0';
+our $VERSION = '1.2.0';
 
 =head1 NAME
 
@@ -701,7 +698,7 @@ __PACKAGE__->_init_accessors();
 
 =head1 AUTHOR
 
-Thomas Hackl S<thomas.hackl@uni-wuerzburg.de>
+Thomas Hackl S<thackl@lim4.de>
 
 =cut
 
