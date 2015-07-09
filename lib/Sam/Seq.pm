@@ -23,7 +23,7 @@ use constant {
     PROOVREAD_CONSTANT => 120,
 };
 
-our $VERSION = '1.0.0';
+our $VERSION = '1.0.1';
 
 
 
@@ -60,18 +60,6 @@ Class for handling sam reference sequences and its aligned reads.
 
 
 =head1 Class ATTRIBUTES
-
-=cut
-
-=head2 $V
-
-Verbose messages are handled using the Verbose.pm module. To
- customize verbose message behaviour, overwrite the attribute with
- another Verbose object created with the Verbose module.
-
-=cut
-
-our $V = Verbose->new();
 
 =head2 $BinSize [20]
 
@@ -484,7 +472,7 @@ sub State_matrix{
                 }
 
 
-		$V->exit("Empty Cigar") unless @cigar;
+		die (((caller 0)[3])."Empty Cigar") unless @cigar;
 
 		# reference position
 		my $rpos = $aln->pos-1;
@@ -519,7 +507,7 @@ sub State_matrix{
 				}elsif($cigar[$i+1] eq 'I'){
 					$ic+= $cigar[$i];
 				}else{
-					$V->exit("Unknown Cigar '".$cigar[$i+1]."'");
+					die (((caller 0)[3])."Unknown Cigar '".$cigar[$i+1]."'");
 				}
 			}
 
@@ -549,7 +537,7 @@ sub State_matrix{
 				}elsif($cigar[$i+1] eq 'I'){
 					$tail+=$cigar[$i];
 				}else{
-					$V->exit("Unknown Cigar '".$cigar[$i+1]."'");
+					die (((caller 0)[3])."Unknown Cigar '".$cigar[$i+1]."'");
 				}
 			}
 
@@ -601,7 +589,7 @@ sub State_matrix{
                         }
                         $qpos += $cigar[$i];
                     } else {
-                        $V->exit("Unknown Cigar '".$cigar[$i+1]."'");
+                        die (((caller 0)[3])."Unknown Cigar '".$cigar[$i+1]."'");
                     }
 		}
 
