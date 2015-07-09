@@ -10,7 +10,7 @@ use Sam::Alignment qw(:flags);
 
 our $VERSION = '1.1.0';
 
-=head1 NAME 
+=head1 NAME
 
 Sam::Parser.pm
 
@@ -24,8 +24,8 @@ Parser module for SAM format files.
 
   use Sam::Parser;
   use Sam::Alignment ':flags';
-  
-  my $sp = Sam::Parser->new( 
+
+  my $sp = Sam::Parser->new(
       # parse from a file
     file => '/some/sam/file.sam',
       #or from a file handle
@@ -33,30 +33,30 @@ Parser module for SAM format files.
       # or even from a STRINGREF
     file => \$sam_string,
   );
-  
+
   # print names of all reference sequences from header
   while(%h = $sp->next_header_line('@SQ')){
   	print $h{'SN'}."\n";
   }
-  
-  # parser for file handle and with customized is routine 
+
+  # parser for file handle and with customized is routine
   # read starts with 'C'
-  my $sp = Sam::Parser->new( 
+  my $sp = Sam::Parser->new(
     fh => \*SAM,
     is => sub{ substr($_[0]->seq, 0, 1) eq 'C' }
-  );	
-  
+  );
+
   # print read ids of all reads with bad quality
   while( my $aln = $sp->next_aln() ){
     print $aln->qname() if $aln->is_bad_quality();
   }
-  
+
   # seek the begin of the alignments for reparsing
   $sp->seek_alignment_section();
-  
+
   # reset the 'is' routine
   $sp->is(MAPPED_BOTH);
-  
+
   # print sequences of read pairs with both reads mapped
   while( my ($aln1, $aln2) = $sp->next_pair() ){
     print $aln1->seq().", ".$aln2->seq()."\n";
@@ -68,12 +68,12 @@ Parser module for SAM format files.
 
 =head2 new
 
-Initialize a sam parser object. Takes parameters in key => value format. 
+Initialize a sam parser object. Takes parameters in key => value format.
 
   fh => \*STDIN,
   file => undef,
   is => undef,
-  mode => '<',   # read, 
+  mode => '<',   # read,
                  # '+>': read+write (clobber file first)
                  # '+<': read+write (append)
                  # '>' : write (clobber file first)
@@ -92,7 +92,7 @@ my %SELF;
 
 sub new{
 	my $class = shift;
-	
+
 	my $self = {
             %SELF,
             # defaults
@@ -109,7 +109,7 @@ sub new{
 	};
 
 	bless $self, $class;
-        
+
 	# open file in read/write mode
         die "Either file or fh required\n" if ($self->file && $self->fh);
         $self->fh(\*STDIN) if (!$self->file && !$self->fh);
@@ -119,7 +119,7 @@ sub new{
 
 	# prepare _is test routine
 	$self->is($self->{is}) if $self->{is};
-	
+
 	return $self;
 }
 
@@ -166,7 +166,7 @@ sub _init_accessors{
 
 =head2 next_aln
 
-Loop through sam file and return next 'Sam::Alignment' object (meeting the 
+Loop through sam file and return next 'Sam::Alignment' object (meeting the
  'is' criteria if specified).
 
 =cut
@@ -175,12 +175,12 @@ sub next_aln{
 	my %aln;
 	my ($self, $seek) = @_;
 	my $fh = $self->{fh};
-	
+
 	# process line buffer before looping
 	if(my $sam = $self->{_line_buffer}){
 		# clear buffer
 		$self->{_line_buffer} = undef;
-		
+
 		$self->next_aln() if $sam =~ /^@/;
 		if(!$self->{_aln_section}){
 			$self->{_aln_section} = tell($fh)-length($sam);
@@ -189,7 +189,7 @@ sub next_aln{
 		my $aln = Sam::Alignment->new($sam);
 		return $aln if !$self->{_is} or &{$self->{_is}}($aln);
 	}
-	
+
 	# loop if line buffer was empty or did not return
 	while(<$fh>){
 		# skip header
@@ -208,33 +208,33 @@ sub next_aln{
 
 =head2 next_pair / next_pair_single
 
-Loop through sam file and return next 'Sam::Alignment' objects of a read 
+Loop through sam file and return next 'Sam::Alignment' objects of a read
  pair(matching the 'is' criteria if specified).
 
-Which of the two methods you need depends on your data. The difference is 
- the handling of read pairs with only one mapped read ('half-mapped') by 
- different programs. If they are reported as single line you need to use 
+Which of the two methods you need depends on your data. The difference is
+ the handling of read pairs with only one mapped read ('half-mapped') by
+ different programs. If they are reported as single line you need to use
  C<next_pair_single()> (e.g. segemehl with particular settings) else if
- they are reported in two lines use C<next_pair()>. Using the wrong 
+ they are reported in two lines use C<next_pair()>. Using the wrong
  method will produce false results!
 
 =over 12
 
 =item next_pair
 
-Use if half mapped pairs are reported as two lines/alignments in your sam. 
+Use if half mapped pairs are reported as two lines/alignments in your sam.
  Returns an list of the two alignment objects of a read pair.
 
 =item next_pair_single
 
-Use if half mapped pairs are reported as a single line/alignment in your sam. 
+Use if half mapped pairs are reported as a single line/alignment in your sam.
  Returns a list of the two alignment if both reads mapped and one alignment
  object if only one mapped.
 
 =back
 
-NOTE: C<next_pair(), next_pair_single()> can produce inconsistent 
- results if not used from the start of the file and if mixed with single 
+NOTE: C<next_pair(), next_pair_single()> can produce inconsistent
+ results if not used from the start of the file and if mixed with single
  line operations like C<next_aln()> on the same parser instance.
 
 =cut
@@ -242,12 +242,12 @@ NOTE: C<next_pair(), next_pair_single()> can produce inconsistent
 sub next_pair{
 	my ($self) = @_;
 	my $fh = $self->{fh};
-	
+
 	# process line buffer before looping
 	if(my $sam1 = $self->{_line_buffer}){
 		# clear buffer
 		$self->{_line_buffer} = undef;
-		
+
 		$self->next_pair() if $sam1 =~ /^@/;
 		if(!$self->{_aln_section}){
 			$self->{_aln_section} = tell($fh)-length($sam1);
@@ -268,7 +268,7 @@ sub next_pair{
 			next if $sam1 =~ /^@/;
 			$self->{_aln_section} = tell($fh)-length($sam1);
 		}
-		
+
 		# aln1
 		my $aln1 = Sam::Alignment->new( $sam1 );
 		# aln2
@@ -283,26 +283,26 @@ sub next_pair{
 sub next_pair_single{
 	my ($self) = @_;
 	my $fh = $self->{fh};
-	
+
 	# process line buffer before looping
 	if(my $sam1 = $self->{_line_buffer}){
 		# clear buffer
 		$self->{_line_buffer} = undef;
-		
+
 		$self->next_pair_single() if $sam1 =~ /^@/;
 		if(!$self->{_aln_section}){
 			$self->{_aln_section} = tell($fh)-length($sam1);
 		}
-		
+
 		# aln1
-		my $aln1 = Sam::Alignment->new( $sam1 );			
+		my $aln1 = Sam::Alignment->new( $sam1 );
 		# aln2 ?
 		unless($aln1->is(MAPPED_BOTH)){ # aln1 only
 			return ($aln1, undef) if !$self->{_is} || &{$self->{_is}}($aln1)
 		}else{ # aln2
 			my $aln2 = Sam::Alignment->new( scalar <$fh> );
 			return ($aln1, $aln2) if !$self->{_is} || (&{$self->{_is}}($aln1) && &{$self->{_is}}($aln2));
-		}	
+		}
 	}
 
 	# loop if line buffer was empty or did not return
@@ -313,9 +313,9 @@ sub next_pair_single{
 			next if $sam1 =~ /^@/;
 			$self->{_aln_section} = tell($fh)-length($sam1);
 		}
-		
+
 		# aln1
-		my $aln1 = Sam::Alignment->new( $sam1 );			
+		my $aln1 = Sam::Alignment->new( $sam1 );
 		# aln2 ?
 		unless($aln1->is(MAPPED_BOTH)){ # aln1 only
 			return ($aln1, undef) if !$self->{_is} ||  &{$self->{_is}}($aln1)
@@ -325,7 +325,7 @@ sub next_pair_single{
 		}
 	}
 	#eof
-	return;	
+	return;
 }
 
 =head2 next_seq
@@ -376,8 +376,8 @@ sub next_idxstat{
 
 =head2 aln_by_pos
 
-Get an alignment, based on a byte offset position, return 'Sam::Alignment' 
- object (if meeting the 'is' criteria if specified) or undef. Also resets 
+Get an alignment, based on a byte offset position, return 'Sam::Alignment'
+ object (if meeting the 'is' criteria if specified) or undef. Also resets
  the filehandle for C<< next_... >> methods.
 
   $aln = $sp->aln_by_pos($pos);
@@ -387,9 +387,9 @@ Get an alignment, based on a byte offset position, return 'Sam::Alignment'
 sub aln_by_pos{
 	my ($self, $seek) = @_;
 	my $fh = $self->{fh};
-	
+
 	seek($fh, $seek, 0) || return undef;
-	
+
 	my $l = scalar <$fh>;
 	return if $l =~ m/^@/; # header section
 
@@ -400,18 +400,18 @@ sub aln_by_pos{
 
 =head2 next_header_line
 
-Parse linewise through sam file header information. The method returns the 
- entire line if used in SCALAR context, in LIST context a tag => value list 
- corresponding to the TAG:VALUE format of sam header lines, for convenience 
- each @CO comment line is returned as CO => <comment> and can be written 
- directly to a hash just like the other lines. In LIST context, the C<raw> 
- key contains the entire line. 
- 
-To retrieve a specific header line, provide the corresponding header 
- subsection key. If no key is given, any next header line is returned. 
- Returns FALSE if no (more) matching header lines are in the file. 
+Parse linewise through sam file header information. The method returns the
+ entire line if used in SCALAR context, in LIST context a tag => value list
+ corresponding to the TAG:VALUE format of sam header lines, for convenience
+ each @CO comment line is returned as CO => <comment> and can be written
+ directly to a hash just like the other lines. In LIST context, the C<raw>
+ key contains the entire line.
 
-The following 
+To retrieve a specific header line, provide the corresponding header
+ subsection key. If no key is given, any next header line is returned.
+ Returns FALSE if no (more) matching header lines are in the file.
+
+The following
  subsection keys can but don't need to be present in a standard sam file.
 
   #key   meaning (mandatory TAGs of subsection entry)
@@ -420,19 +420,19 @@ The following
   @RG => read groups (ID)
   @PG => program (ID)
   @CO => comments
-  
+
   # print names of all reference sequences from header
   while(%h = $sp->next_header_line('@SQ')){
   	print $h{'SN'}."\n";
   }
-  
+
 
 =cut
 
 sub next_header_line{
 	my ($self, $search_tag) = (@_, '@');
 	my $fh = $self->{fh};
-	
+
 	# process line buffer before looping
 	if(my $sam = $self->{_line_buffer}){
 		unless($sam =~ /^@/){ # not header section
@@ -440,29 +440,29 @@ sub next_header_line{
 		}else{ # clear buffer
 			$self->{_line_buffer} = undef;
 		}
-		
+
 		if (my ($tag, $content) = $sam =~ /^(\@?(?:$search_tag)\w{0,2})\s(.*)/){
 			if(wantarray){
-				return $tag eq '@CO' 
-					? (CO => $content, raw => $sam, tag => $tag) 
+				return $tag eq '@CO'
+					? (CO => $content, raw => $sam, tag => $tag)
 					: ($content =~ /(\w\w):(\S+)/g, raw => $sam, tag => $tag);
 			}else{
 				return $sam;
 			}
 		}
 	}
-	
+
 	# loop if line buffer was empty or did not return
 	# get next header line
 	while(	my $sam = <$fh> ){
 		unless($sam =~ /^@/){ # end of header section
 			$self->{_line_buffer} = $sam;
-			return; 
+			return;
 											#  /^\@?($search_tag\w{0,2})\s(.*)/
 		}elsif (my ($tag, $content) = $sam =~ /^(\@?(?:$search_tag)\w{0,2})\s(.*)/){
                     if(wantarray){
-				return $tag eq '@CO' 
-					? (CO => $content, raw => $sam, tag => $tag) 
+				return $tag eq '@CO'
+					? (CO => $content, raw => $sam, tag => $tag)
 					: ($content =~ /(\w\w):(\S+)/g, raw => $sam, tag => $tag);
 			}else{
 				return $sam;
@@ -475,7 +475,7 @@ sub next_header_line{
 
 =head2 seek_alignment_section
 
-Reset the file handle to the start of the alignment section. Resets 
+Reset the file handle to the start of the alignment section. Resets
  C<next_aln(), next_pair()> to the first aln in the sam file.
 
 NOTE: this operation does only work on real files, not on STDIN.
@@ -529,7 +529,7 @@ sub seek{
 Append an alignment to the file, provided as object or string. Returns the
  byte offset position in the file.
 
-NOTE: In case a string is provided, make sure it contains trailing newline 
+NOTE: In case a string is provided, make sure it contains trailing newline
  since no further test is performed.
 
 =cut
@@ -654,27 +654,27 @@ sub idxstat{
 
 =head2 is
 
-Get/Set conditions that determine which alignments are returned by the 
- next methods. Takes either a reference to a list of property bitmasks 
+Get/Set conditions that determine which alignments are returned by the
+ next methods. Takes either a reference to a list of property bitmasks
  or a code reference to a customized test which returns 1 and 0 respectively.
  To explicitly deactivate testing, provide a value that evaluates to FALSE.
  For details on bitmasks see L<Sam::Alignment>.
- 
-The test routine is executed with the parameters C<$parser_obj, $aln_obj> 
+
+The test routine is executed with the parameters C<$parser_obj, $aln_obj>
  and for C<next_pair()> additionally with C< $aln_obj2 >.
 
   # parser returning only BAD_QUALITY alns
   my $sp = Sam::Parser->new(
   	is => [Sam::Alignment->BAD_QUALITY]
   );
-  
+
   # customized parser that only returns reads with a GC content > 70%.
   my $sp = Sam::Parser->new(
   	is => sub{
   	my ($self, $aln) = @_;
   	return ($aln->seq =~ tr/GC//) / length($aln->seq) > .7 ? 1 : 0;
   })
-  
+
   # deactivate testing
   my $sp->is(0);
 
@@ -691,7 +691,7 @@ sub is{
 			$self->{_is} = $is;
 		}else{
 			die (((caller 0)[3])." neither ARRAY nor CODE reference given!\n");
-		}	
+		}
 	}
 	return $self->{_is};
 }
@@ -708,6 +708,3 @@ Thomas Hackl S<thomas.hackl@uni-wuerzburg.de>
 
 
 1;
-
-
-
