@@ -5,7 +5,7 @@ use strict;
 
 use Sam::Alignment qw(:flags);
 
-our $VERSION = '1.2.0';
+our $VERSION = '1.3.0';
 
 =head1 NAME
 
@@ -81,7 +81,7 @@ Initialize a sam parser object. Takes parameters in key => value format.
 
 my @ATTR_SCALAR = qw(file fh is mode
                      samtools_path samtools region
-                     _is_bam _idxstats_fh _idxstats
+                     _header_fh _is_bai _idxstats_fh _idxstats
                 );
 
 my %SELF;
@@ -101,7 +101,7 @@ sub new{
             _line_buffer => undef,
             _aln_section => undef,
             _is => undef,
-            _is_bam => undef,
+            _is_bai => undef,
             _idxstats_fh => undef,
 	};
 
@@ -110,9 +110,11 @@ sub new{
 	# open file in read/write mode
         die "Either file or fh required\n" if ($self->file && $self->fh);
         $self->fh(\*STDIN) if (!$self->file && !$self->fh);
-	$self->file2fh if $self->file;
 
         $self->samtools(join("/", grep{$_}($self->samtools_path, $self->samtools)));
+
+        $self->file2fh if $self->file;
+        $self->cache_header unless $self->_is_bai;
 
 	# prepare _is test routine
 	$self->is($self->{is}) if $self->{is};
@@ -121,10 +123,10 @@ sub new{
 }
 
 sub DESTROY{
-	# just to be sure :D
-	my $self = shift;
-	close $self->fh if $self->fh;
-	close $self->_idxstats_fh if $self->_idxstats_fh;
+    my $self = shift;
+    foreach my $fh (qw(fh _header_fh _idxstats_fh)) {
+        close $self->$fh if $self->$fh;
+    }
 }
 
 
@@ -333,7 +335,7 @@ Return next Sam::Seq object. Only works with BAM.
 
 sub next_seq{
     my ($self) = @_;
-    die (((caller 0)[3]).": only works on BAM files\n") unless $self->_is_bam;
+    die (((caller 0)[3]).": only works on indexed BAM files\n") unless $self->_is_bai;
 
     my ($id, $len);
     if ($self->region){
@@ -363,7 +365,7 @@ Read idxstats. Returns LIST (id, len, #reads mapped, #reads unmapped).
 
 sub next_idxstat{
     my ($self) = @_;
-    die (((caller 0)[3]).": only works on BAM files\n") unless $self->_is_bam;
+    die (((caller 0)[3]).": only works on indexed BAM files\n") unless $self->_is_bai;
     my $s = readline($self->_idxstats_fh);
     return unless defined $s;
     chomp($s);
@@ -588,25 +590,57 @@ sub file{
 
 sub file2fh{
     my ($self) = @_;
-    my $fh;
 
-    if ($self->file =~ /\.bam$/i) {
-        die "reading (<) is currently the only supported mode for BAM files" unless $self->{mode} eq '<';
-        my $cmd = $self->samtools." view ".$self->file.($self->region ? " ".$self->region : "")." |";
-        open($fh, $cmd) or die (((caller 0)[3]).": $!\n$cmd\n");
-        $self->_is_bam(1);
-
-        my $idxstats_cmd = $self->samtools." idxstats ".$self->file." |";
-        open($self->{_idxstats_fh}, $idxstats_cmd) or die (((caller 0)[3]).": $!\n$idxstats_cmd\n");
-
-    }else{
-        open($fh , $self->{mode}, $self->file) or die sprintf("%s: %s, %s",(caller 0)[3],$self->file, $!);
-        $self->_is_bam(0);
+    die (((caller 0)[3]).": only read '<' and write '>' mode supported\n") unless $self->mode eq '<' or $self->mode eq '>';
+    # write
+    if ( $self->mode eq '>' ) {
+        my $cmd = $self->samtools." view ".$self->file;
+        open($self->{fh}, "|-", $cmd) or die (((caller 0)[3]).": $!\n$cmd\n");
+        return $self->{fh};
     }
 
-    die (((caller 0)[3]).": region only works on BAM files") if $self->region && !$self->_is_bam;
+    -e $self->file.'.bai' ? $self->_is_bai(1) : $self->_is_bai(0);
 
-    $self->fh($fh);
+    # read
+    die $self->file." doesn't exist\n" unless -e $self->file;
+
+    if ( $self->_is_bai ){
+        my $cmd = $self->samtools." view ".$self->file.($self->region ? " ".$self->region : "");
+        open($self->{fh}, "-|", $cmd) or die (((caller 0)[3]).": $!\n$cmd\n");
+
+        my $idxstats_cmd = $self->samtools." idxstats ".$self->file;
+        open($self->{_idxstats_fh}, "-|", $idxstats_cmd) or die (((caller 0)[3]).": $!\n$idxstats_cmd\n");
+
+        my $header_cmd = $self->samtools." view -H ".$self->file;
+        open($self->{_header_fh}, "-|", $header_cmd) or die (((caller 0)[3]).": $!\n$header_cmd\n");
+    }else{ # only one chance to cache header
+        my $cmd = $self->samtools." view -h ".$self->file.($self->region ? " ".$self->region : "");
+        open($self->{fh}, "-|", $cmd) or die (((caller 0)[3]).": $!\n$cmd\n");
+    }
+
+    return $self->fh;
+}
+
+=head2 cache_header
+
+Read and cache header from stream. Automatically done if no .bai.
+
+=cut
+
+sub cache_header{
+    my ($self) = @_;
+    my $fh = $self->fh;
+    my $h = '';
+    my $c;
+    while (1) {
+        $c = $fh->getc();
+        last if ! defined($c) or $c ne '@';
+        $h.= $c.<$fh>;
+    }
+    $fh->ungetc(ord($c)) if defined $c;       # push back peek
+
+    $self->{_header} = $h;
+    open($self->{_header_fh}, '<', \$self->{_header}) or die $!;
 }
 
 =head2 region
