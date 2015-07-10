@@ -22,18 +22,11 @@ Parser module for SAM format files.
   use Sam::Parser;
   use Sam::Alignment ':flags';
 
-  # SAM from STDIN
-  my $sp = Sam::Parser->new();
+  my $sp = Sam::Parser->new(
+    file => "file.bam"
+  );
 
-  # BAM, profits from .bai (faster and more functionality)
-  my $sp = Sam::Parser->new(file => "/path/to/file.bam");
-
-  # Fancy
-  open(my $fh, 'samtools view file.bam | filter-bam |');
-  my $sp = Sam::Parser->new(fh => $fh);
-
-  # parser for file handle and with customized is routine
-  # read starts with 'C'
+  # parser for file handle and with customized is routine read starts with 'C'
   my $sp = Sam::Parser->new(
     fh => \*SAM,
     is => sub{ substr($_[0]->seq, 0, 1) eq 'C' }
@@ -50,11 +43,6 @@ Parser module for SAM format files.
   # reset the 'is' routine
   $sp->is(MAPPED_BOTH);
 
-  # print sequences of read pairs with both reads mapped
-  while( my ($aln1, $aln2) = $sp->next_pair() ){
-    print $aln1->seq().", ".$aln2->seq()."\n";
-  }
-
 =cut
 
 =head1 Constructor METHOD
@@ -63,20 +51,27 @@ Parser module for SAM format files.
 
 Initialize a sam parser object. Takes parameters in key => value format.
 
-  fh => \*STDIN,
-  file => undef,
-  is => undef,
-  mode => '<',   # read,
-                 # '+>': read+write (clobber file first)
-                 # '+<': read+write (append)
-                 # '>' : write (clobber file first)
-                 # '>>': write (append)
-=back
+  my $sp = Sam::Parser->new(file => .sam/.bam);
+
+  # lazy SAM from STDIN with samtools filter
+  my $sp = Sam::Parser->new(
+    samtools_opt => '-f 16 -q 20' # reverse only and mapping qual >20
+  );
+
+  # something a tad more fancy
+  open(my $fh, 'samtools view file.bam | filter-bam |');
+  my $sp = Sam::Parser->new(fh => $fh);
+
+  # write (only bam)
+  my $sp = Sam::Parser->new(
+    file => new.bam
+    mode => '>',
+  );
 
 =cut
 
 my @ATTR_SCALAR = qw(file fh is mode
-                     samtools_path samtools region
+                     samtools_path samtools_exe samtools_opt samtools region
                      _header_fh _is_bai _idxstats_fh _idxstats
                 );
 
@@ -90,12 +85,10 @@ sub new{
             %SELF,
             # defaults
             mode => '<',
-            samtools => 'samtools',
+            samtools_exe => 'samtools',
             # overwrite defaults
             @_,
             # protected
-            _line_buffer => undef,
-            _aln_section => undef,
             _is => undef,
             _is_bai => undef,
             _idxstats_fh => undef,
@@ -107,7 +100,7 @@ sub new{
         die "Either file or fh required\n" if ($self->file && $self->fh);
         $self->fh(\*STDIN) if (!$self->file && !$self->fh);
 
-        $self->samtools(join("/", grep{$_}($self->samtools_path, $self->samtools)));
+        $self->samtools_exe(join("/", grep{$_}($self->samtools_path, $self->samtools_exe)));
 
         $self->file2fh if $self->file;
         $self->cache_header unless $self->_is_bai;
@@ -139,25 +132,119 @@ sub DESTROY{
 
 =cut
 
-=head2 fh, mode, samtools, samtools_path
+=head2 region
 
-Get/set ...
+Get/set region. Only works with indexed BAM files.
 
 =cut
 
-sub _init_accessors{
-    no strict 'refs';
-
-    # generate simple accessors closure style
-    foreach my $attr ( @ATTR_SCALAR ) {
-        next if $_[0]->can($attr); # don't overwrite explicitly created subs
-        *{__PACKAGE__ . "::$attr"} = sub {
-            $_[0]->{$attr} = $_[1] if @_ == 2;
-            return $_[0]->{$attr};
-        }
+sub region{
+    my ($self, $region) = @_;
+    if (@_>1) {
+        $self->{region} = $region;
+        $self->file2fh; # update fh
     }
+    return $self->{region};
 }
 
+=head2 is
+
+Get/Set conditions that determine which alignments are returned by the
+ next methods. Takes either a reference to a list of property bitmasks
+ or a code reference to a customized test which returns 1 and 0 respectively.
+ To explicitly deactivate testing, provide a value that evaluates to FALSE.
+ For details on bitmasks see L<Sam::Alignment>.
+
+The test routine is executed with the parameters C<$parser_obj, $aln_obj>
+ and for C<next_pair()> additionally with C< $aln_obj2 >.
+
+  # parser returning only BAD_QUALITY alns
+  my $sp = Sam::Parser->new(
+  	is => [Sam::Alignment->BAD_QUALITY]
+  );
+
+  # customized parser that only returns reads with a GC content > 70%.
+  my $sp = Sam::Parser->new(
+  	is => sub{
+  	my ($self, $aln) = @_;
+  	return ($aln->seq =~ tr/GC//) / length($aln->seq) > .7 ? 1 : 0;
+  })
+
+  # deactivate testing
+  my $sp->is(0);
+
+=cut
+
+sub is{
+	my ($self, $is) = @_;
+	if(@_== 2){
+		unless($is){
+			$self->{_is} = undef;
+		}elsif(ref($is) eq 'ARRAY'){
+			$self->{_is} = eval 'sub{$_[0]->is('.join(', ', @$is).')}';
+		}elsif(ref($is) eq 'CODE'){
+			$self->{_is} = $is;
+		}else{
+			die (((caller 0)[3])." neither ARRAY nor CODE reference given!\n");
+		}
+	}
+	return $self->{_is};
+}
+
+=head2 header
+
+Get header as string.
+
+=cut
+
+sub header{
+    my ($self) = @_;
+    return $self->{_header} if defined($self->{_header}); # cached
+
+    my $cmd = $self->samtools("view -H", $self->file);
+    return qx($cmd);
+}
+
+=head2 next_header
+
+Parse header, returns line as string in SCALAR context. In LIST context returns
+ tag => value list, with @CO lines as CO => comment and raw => raw_line.
+ Returns FALSE if no (more) matching header lines are in the file.
+
+Limit method to a subset of header lines by providing a specific tag:
+
+  # print names of all reference sequences from header
+  while(%h = $sp->next_header('@SQ')){
+  	print $h{'SN'}."\n";
+  }
+
+=cut
+
+{ # backward comp
+    no warnings 'once';
+    *next_header_line = \&next_header;
+}
+
+sub next_header{
+    my ($self, $search_tag) = (@_, '@');
+    my $fh = $self->{_header_fh};
+
+    # loop if line buffer was empty or did not return
+    # get next header line
+    while ( my $sam = <$fh> ) {
+        if (my ($tag, $content) = $sam =~ /^(\@?(?:$search_tag)\w{0,2})\s(.*)/) {
+            if (wantarray) {
+                return $tag eq '@CO'
+                    ? (CO => $content, raw => $sam, tag => $tag)
+                    : ($content =~ /(\w\w):(\S+)/g, raw => $sam, tag => $tag);
+            } else {
+                return $sam;
+            }
+        }
+        next;
+    }
+    return;
+}
 
 =head2 next_aln
 
@@ -221,62 +308,6 @@ sub next_idxstat{
     return split("\t", $s)
 }
 
-=head2 next_header_line
-
-Parse linewise through sam file header information. The method returns the
- entire line if used in SCALAR context, in LIST context a tag => value list
- corresponding to the TAG:VALUE format of sam header lines, for convenience
- each @CO comment line is returned as CO => <comment> and can be written
- directly to a hash just like the other lines. In LIST context, the C<raw>
- key contains the entire line.
-
-To retrieve a specific header line, provide the corresponding header
- subsection key. If no key is given, any next header line is returned.
- Returns FALSE if no (more) matching header lines are in the file.
-
-The following
- subsection keys can but don't need to be present in a standard sam file.
-
-  #key   meaning (mandatory TAGs of subsection entry)
-  @HD => header line (VN)
-  @SQ => reference sequence directory (SN, LN)
-  @RG => read groups (ID)
-  @PG => program (ID)
-  @CO => comments
-
-  # print names of all reference sequences from header
-  while(%h = $sp->next_header('@SQ')){
-  	print $h{'SN'}."\n";
-  }
-
-
-=cut
-
-{ # backward comp
-    no warnings 'once';
-    *next_header_line = \&next_header;
-}
-
-sub next_header{
-    my ($self, $search_tag) = (@_, '@');
-    my $fh = $self->{_header_fh};
-
-    # loop if line buffer was empty or did not return
-    # get next header line
-    while ( my $sam = <$fh> ) {
-        if (my ($tag, $content) = $sam =~ /^(\@?(?:$search_tag)\w{0,2})\s(.*)/) {
-            if (wantarray) {
-                return $tag eq '@CO'
-                    ? (CO => $content, raw => $sam, tag => $tag)
-                    : ($content =~ /(\w\w):(\S+)/g, raw => $sam, tag => $tag);
-            } else {
-                return $sam;
-            }
-        }
-        next;
-    }
-    return;
-}
 
 =head2 append_aln
 
@@ -312,33 +343,24 @@ sub tell{
 	return tell($self->{fh});
 }
 
-=head2 append_tell
+=head2 fh, mode, samtools_exe, samtools_path
 
-DEPRECATED: use C<< $fp->tell() >>
-
-Return the byte offset of the current append filehandle position
+Get/set ...
 
 =cut
 
-sub append_tell{
-	shift->tell(@_)
+sub _init_accessors{
+    no strict 'refs';
+
+    # generate simple accessors closure style
+    foreach my $attr ( @ATTR_SCALAR ) {
+        next if $_[0]->can($attr); # don't overwrite explicitly created subs
+        *{__PACKAGE__ . "::$attr"} = sub {
+            $_[0]->{$attr} = $_[1] if @_ == 2;
+            return $_[0]->{$attr};
+        }
+    }
 }
-
-=head2 header
-
-=cut
-
-sub header{
-    my ($self) = @_;
-    return $self->{_header} if defined($self->{_header}); # cached
-
-    my $cmd = $self->samtools." view -H ".$self->file;
-    return qx($cmd);
-}
-
-############################################################################
-
-=head1 Accessor METHODS
 
 =head2 file
 
@@ -357,6 +379,8 @@ sub file{
 
 =head2 file2fh
 
+Check file (sam/bam/bai) and open file handles accordingly.
+
 =cut
 
 sub file2fh{
@@ -365,7 +389,7 @@ sub file2fh{
     die (((caller 0)[3]).": only read '<' and write '>' mode supported\n") unless $self->mode eq '<' or $self->mode eq '>';
     # write
     if ( $self->mode eq '>' ) {
-        my $cmd = $self->samtools." view ".$self->file;
+        my $cmd = $self->samtools("view", $self->file);
         open($self->{fh}, "|-", $cmd) or die (((caller 0)[3]).": $!\n$cmd\n");
         return $self->{fh};
     }
@@ -376,16 +400,16 @@ sub file2fh{
     die $self->file." doesn't exist\n" unless -e $self->file;
 
     if ( $self->_is_bai ){
-        my $cmd = $self->samtools." view ".$self->file.($self->region ? " ".$self->region : "");
+        my $cmd = $self->samtools("view", $self->samtools_opt, $self->file, $self->region);
         open($self->{fh}, "-|", $cmd) or die (((caller 0)[3]).": $!\n$cmd\n");
 
-        my $idxstats_cmd = $self->samtools." idxstats ".$self->file;
+        my $idxstats_cmd = $self->samtools("idxstats", $self->file);
         open($self->{_idxstats_fh}, "-|", $idxstats_cmd) or die (((caller 0)[3]).": $!\n$idxstats_cmd\n");
 
-        my $header_cmd = $self->samtools." view -H ".$self->file;
+        my $header_cmd = $self->samtools("view -H", $self->file);
         open($self->{_header_fh}, "-|", $header_cmd) or die (((caller 0)[3]).": $!\n$header_cmd\n");
     }else{ # only one chance to cache header
-        my $cmd = $self->samtools." view -h ".$self->file.($self->region ? " ".$self->region : "");
+        my $cmd = $self->samtools("view -h", $self->samtools_opt, $self->file, $self->region);
         open($self->{fh}, "-|", $cmd) or die (((caller 0)[3]).": $!\n$cmd\n");
     }
 
@@ -414,21 +438,6 @@ sub cache_header{
     open($self->{_header_fh}, '<', \$self->{_header}) or die $!;
 }
 
-=head2 region
-
-Get/set region. Only works with BAM files.
-
-=cut
-
-sub region{
-    my ($self, $region) = @_;
-    if (@_>1) {
-        $self->{region} = $region;
-        $self->file2fh; # update fh
-    }
-    return $self->{region};
-}
-
 =head2 idxstat
 
 Get idxstat for specific ID. Parses and caches idxstats.
@@ -439,8 +448,8 @@ sub idxstat{
     my ($self, $id) = @_;
 
     unless ( $self->_idxstats ) {
-        my $idxstats_cmd = $self->samtools." idxstats ".$self->file." |";
-        open(IDX, $idxstats_cmd) or die (((caller 0)[3]).": $!\n$idxstats_cmd\n");
+        my $idxstats_cmd = $self->samtools("idxstats", $self->file);
+        open(IDX, '-|', $idxstats_cmd) or die (((caller 0)[3]).": $!\n$idxstats_cmd\n");
         $self->{_idxstats} = {};
         while (defined(<IDX>)) {
             chomp;
@@ -454,49 +463,20 @@ sub idxstat{
     return @{$self->_idxstats->{$id}};
 }
 
-=head2 is
+=head2 samtools
 
-Get/Set conditions that determine which alignments are returned by the
- next methods. Takes either a reference to a list of property bitmasks
- or a code reference to a customized test which returns 1 and 0 respectively.
- To explicitly deactivate testing, provide a value that evaluates to FALSE.
- For details on bitmasks see L<Sam::Alignment>.
-
-The test routine is executed with the parameters C<$parser_obj, $aln_obj>
- and for C<next_pair()> additionally with C< $aln_obj2 >.
-
-  # parser returning only BAD_QUALITY alns
-  my $sp = Sam::Parser->new(
-  	is => [Sam::Alignment->BAD_QUALITY]
-  );
-
-  # customized parser that only returns reads with a GC content > 70%.
-  my $sp = Sam::Parser->new(
-  	is => sub{
-  	my ($self, $aln) = @_;
-  	return ($aln->seq =~ tr/GC//) / length($aln->seq) > .7 ? 1 : 0;
-  })
-
-  # deactivate testing
-  my $sp->is(0);
+Get samtools command.
 
 =cut
 
-sub is{
-	my ($self, $is) = @_;
-	if(@_== 2){
-		unless($is){
-			$self->{_is} = undef;
-		}elsif(ref($is) eq 'ARRAY'){
-			$self->{_is} = eval 'sub{$_[0]->is('.join(', ', @$is).')}';
-		}elsif(ref($is) eq 'CODE'){
-			$self->{_is} = $is;
-		}else{
-			die (((caller 0)[3])." neither ARRAY nor CODE reference given!\n");
-		}
-	}
-	return $self->{_is};
+sub samtools{
+    my ($self, @opt) = @_;
+    my $cmd = join(" ", $self->samtools_exe, grep{defined $_}@opt);
+    print STDERR $cmd,"\n";
+    return $cmd;
+
 }
+
 
 # init closure accessors
 __PACKAGE__->_init_accessors();
