@@ -5,7 +5,7 @@ use strict;
 
 use Sam::Alignment qw(:flags);
 
-our $VERSION = '1.3.0';
+our $VERSION = '1.3.2';
 
 =head1 NAME
 
@@ -46,9 +46,6 @@ Parser module for SAM format files.
   while( my $aln = $sp->next_aln() ){
     print $aln->qname() if $aln->is_bad_quality();
   }
-
-  # seek the begin of the alignments for reparsing
-  $sp->seek_alignment_section();
 
   # reset the 'is' routine
   $sp->is(MAPPED_BOTH);
@@ -224,31 +221,6 @@ sub next_idxstat{
     return split("\t", $s)
 }
 
-
-=head2 aln_by_pos
-
-Get an alignment, based on a byte offset position, return 'Sam::Alignment'
- object (if meeting the 'is' criteria if specified) or undef. Also resets
- the filehandle for C<< next_... >> methods.
-
-  $aln = $sp->aln_by_pos($pos);
-
-=cut
-
-sub aln_by_pos{
-	my ($self, $seek) = @_;
-	my $fh = $self->{fh};
-
-	seek($fh, $seek, 0) || return undef;
-
-	my $l = scalar <$fh>;
-	return if $l =~ m/^@/; # header section
-
-	# return sam aln object
-	my $aln = Sam::Alignment->new($l);
-	return $aln if !$self->{_is} || &{$self->{_is}}($aln);
-}
-
 =head2 next_header_line
 
 Parse linewise through sam file header information. The method returns the
@@ -306,57 +278,6 @@ sub next_header{
     return;
 }
 
-=head2 seek_alignment_section
-
-Reset the file handle to the start of the alignment section. Resets
- C<next_aln(), next_pair()> to the first aln in the sam file.
-
-NOTE: this operation does only work on real files, not on STDIN.
-
-=cut
-
-sub seek_alignment_section{
-	my ($self) = @_;
-	die "".((caller 0)[3]).": Filehandle is a pipe, operation requires real file!" unless -f $self->fh;
-	$self->{_line_buffer} = undef;
-	seek($self->fh, $self->{_aln_section} ? $self->{_aln_section} : 0 ,0);
-	return $self;
-}
-
-=head2 seek_header_section
-
-Reset the file handle to the start of the header section (beginning of the
- file). Allows you to reread the header information.
-
-NOTE: this operation does only work on real files, not on STDIN.
-
-=cut
-
-
-sub seek_header_section{
-	my ($self) = @_;
-	die "".((caller 0)[3]).": Filehandle is a pipe, operation requires real file!" unless -f $self->fh;
-	$self->{_line_buffer} = undef;
-	seek($self->fh, 0,0);
-	return $self;
-}
-
-=head2 seek
-
-Set the filehandle to the specified byte offset. Takes two
-optional arguments "POSITION" (0), "WHENCE" (0), see perl "seek" for more.
-Returns 'true' on success.
-
-NOTE: this operation does only work on real files, not on STDIN.
-
-=cut
-
-sub seek{
-	my ($self, $offset, $whence) = (@_, 0, 0);
-	return seek($self->fh, $offset, $whence);
-}
-
-
 =head2 append_aln
 
 Append an alignment to the file, provided as object or string. Returns the
@@ -380,6 +301,11 @@ sub append_aln{
 Return the byte offset of the current append filehandle position
 
 =cut
+
+{ # backward
+    no warnings 'once';
+    *append_tell = \&tell;
+}
 
 sub tell{
 	my ($self) = @_;
