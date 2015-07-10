@@ -22,19 +22,15 @@ Parser module for SAM format files.
   use Sam::Parser;
   use Sam::Alignment ':flags';
 
-  my $sp = Sam::Parser->new(
-      # parse from a file
-    file => '/some/sam/file.sam',
-      #or from a file handle
-    fh => \*SAM,
-      # or even from a STRINGREF
-    file => \$sam_string,
-  );
+  # SAM from STDIN
+  my $sp = Sam::Parser->new();
 
-  # print names of all reference sequences from header
-  while(%h = $sp->next_header_line('@SQ')){
-  	print $h{'SN'}."\n";
-  }
+  # BAM, profits from .bai (faster and more functionality)
+  my $sp = Sam::Parser->new(file => "/path/to/file.bam");
+
+  # Fancy
+  open(my $fh, 'samtools view file.bam | filter-bam |');
+  my $sp = Sam::Parser->new(fh => $fh);
 
   # parser for file handle and with customized is routine
   # read starts with 'C'
@@ -42,6 +38,9 @@ Parser module for SAM format files.
     fh => \*SAM,
     is => sub{ substr($_[0]->seq, 0, 1) eq 'C' }
   );
+
+  # header
+  print $sp->header;
 
   # print read ids of all reads with bad quality
   while( my $aln = $sp->next_aln() ){
@@ -564,6 +563,17 @@ sub append_tell{
 	shift->tell(@_)
 }
 
+=head2 header
+
+=cut
+
+sub header{
+    my ($self) = @_;
+    return $self->{_header} if defined($self->{_header}); # cached
+
+    my $cmd = $self->samtools." view -H ".$self->file;
+    return qx($cmd);
+}
 
 ############################################################################
 
