@@ -273,55 +273,37 @@ The following
   @CO => comments
 
   # print names of all reference sequences from header
-  while(%h = $sp->next_header_line('@SQ')){
+  while(%h = $sp->next_header('@SQ')){
   	print $h{'SN'}."\n";
   }
 
 
 =cut
 
-sub next_header_line{
-	my ($self, $search_tag) = (@_, '@');
-	my $fh = $self->{fh};
+{ # backward comp
+    no warnings 'once';
+    *next_header_line = \&next_header;
+}
 
-	# process line buffer before looping
-	if(my $sam = $self->{_line_buffer}){
-		unless($sam =~ /^@/){ # not header section
-			return; # and keep line buffer filled
-		}else{ # clear buffer
-			$self->{_line_buffer} = undef;
-		}
+sub next_header{
+    my ($self, $search_tag) = (@_, '@');
+    my $fh = $self->{_header_fh};
 
-		if (my ($tag, $content) = $sam =~ /^(\@?(?:$search_tag)\w{0,2})\s(.*)/){
-			if(wantarray){
-				return $tag eq '@CO'
-					? (CO => $content, raw => $sam, tag => $tag)
-					: ($content =~ /(\w\w):(\S+)/g, raw => $sam, tag => $tag);
-			}else{
-				return $sam;
-			}
-		}
-	}
-
-	# loop if line buffer was empty or did not return
-	# get next header line
-	while(	my $sam = <$fh> ){
-		unless($sam =~ /^@/){ # end of header section
-			$self->{_line_buffer} = $sam;
-			return;
-											#  /^\@?($search_tag\w{0,2})\s(.*)/
-		}elsif (my ($tag, $content) = $sam =~ /^(\@?(?:$search_tag)\w{0,2})\s(.*)/){
-                    if(wantarray){
-				return $tag eq '@CO'
-					? (CO => $content, raw => $sam, tag => $tag)
-					: ($content =~ /(\w\w):(\S+)/g, raw => $sam, tag => $tag);
-			}else{
-				return $sam;
-			}
-		}
-		next;
-	}
-	return;
+    # loop if line buffer was empty or did not return
+    # get next header line
+    while ( my $sam = <$fh> ) {
+        if (my ($tag, $content) = $sam =~ /^(\@?(?:$search_tag)\w{0,2})\s(.*)/) {
+            if (wantarray) {
+                return $tag eq '@CO'
+                    ? (CO => $content, raw => $sam, tag => $tag)
+                    : ($content =~ /(\w\w):(\S+)/g, raw => $sam, tag => $tag);
+            } else {
+                return $sam;
+            }
+        }
+        next;
+    }
+    return;
 }
 
 =head2 seek_alignment_section
