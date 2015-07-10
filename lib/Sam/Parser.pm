@@ -472,9 +472,7 @@ Get samtools command.
 sub samtools{
     my ($self, @opt) = @_;
     my $cmd = join(" ", $self->samtools_exe, grep{defined $_}@opt);
-    print STDERR $cmd,"\n";
     return $cmd;
-
 }
 
 
