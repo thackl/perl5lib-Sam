@@ -102,6 +102,8 @@ sub new{
 	}
 	# overwrite defaults
 
+        $self->{qual} //= "*";
+
 	return bless $self, $class;
 }
 
@@ -497,7 +499,7 @@ sub nscore{
     my ($self) = @_;
     my $score = $self->score;
     return unless defined $score;
-    
+
     return $score / $self->length;
 }
 
