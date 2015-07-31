@@ -5,7 +5,7 @@ use strict;
 
 use Sam::Alignment qw(:flags);
 
-our $VERSION = '1.3.2';
+our $VERSION = '1.3.3';
 
 =head1 NAME
 
@@ -451,7 +451,7 @@ sub idxstat{
         my $idxstats_cmd = $self->samtools("idxstats", $self->file);
         open(IDX, '-|', $idxstats_cmd) or die (((caller 0)[3]).": $!\n$idxstats_cmd\n");
         $self->{_idxstats} = {};
-        while (defined(<IDX>)) {
+        while (<IDX>) {
             chomp;
             my (@s) = split("\t", $_);
             $self->{_idxstats}{$s[0]} = \@s;
