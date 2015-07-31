@@ -21,9 +21,18 @@ use constant {
     # :) scaling constant for frequency to phred conversion. The higher
     # the value, the more trust is put into frequency (proovread-1.01: 50)
     PROOVREAD_CONSTANT => 120,
+
+    # pacbio scoring scheme - aln2score
+    # bwa (-A 5 -B 11 -O 2,1 -E 4,3)
+    MA => 0, # use 0 not prevent just having the longer alignment win
+    MM => -11,
+    RGO => -2,
+    QGO => -1,
+    RGE => -4,
+    QGE => -3,
 };
 
-our $VERSION = '1.0.1';
+our $VERSION = '1.1.1';
 
 
 
@@ -106,6 +115,14 @@ Boolean. Deactivate trimming completely, including leading/trailing indels
 =cut
 
 our $Trim = 1;
+
+=head2 StateMatrixMinAlnLength
+
+Alignments shorter than this are not ignored in state matrix construction. Default 50.
+
+=cut
+
+our $StateMatrixMinAlnLength = 50;
 
 =head2 $MaxInsLength
 
@@ -194,6 +211,18 @@ sub PhredOffset{
 	my ($class, $offset) = @_;
 	$PhredOffset = $offset if defined $offset;
 	return $PhredOffset;
+}
+
+=head2 StateMatrixMinAlnLength
+
+Get/Set $Sam::Seq::StateMatrixMinAlnLength. Default 0.
+
+=cut
+
+sub StateMatrixMinAlnLength{
+	my ($class, $cov) = @_;
+	$StateMatrixMinAlnLength = $cov if defined $cov;
+	return $StateMatrixMinAlnLength;
 }
 
 =head2 RepCoverage
@@ -436,7 +465,7 @@ sub State_matrix{
 		# get read seq
 		my $seq = $aln->seq;
 		my $orig_seq_length = length($seq);
-		next unless $orig_seq_length > 50;
+		next unless $orig_seq_length > $StateMatrixMinAlnLength;
 
                 my $qua = $aln->qual;
 
@@ -543,7 +572,7 @@ sub State_matrix{
 
 			# have to have kept at least 50 bps and 70% of original read length
 			#  to consider read for state matrix
-			next if length($seq) < 50  || (length($seq)/$orig_seq_length) < 0.7;
+			next if length($seq) < $StateMatrixMinAlnLength  || (length($seq)/$orig_seq_length) < 0.7;
 		}
 
 
