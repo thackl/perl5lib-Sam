@@ -32,7 +32,7 @@ use constant {
     QGE => -3,
 };
 
-our $VERSION = '1.2.0';
+our $VERSION = '1.2.1';
 
 
 
@@ -494,8 +494,10 @@ Returns a Sam::Seq object.
 
 =cut
 
-# alias for cloning
-*clone = \&new;
+{ # alias for cloning
+    no warnings 'once';
+    *clone = \&new;
+}
 
 sub new{
 	my $proto = shift;
