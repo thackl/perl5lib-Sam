@@ -32,7 +32,7 @@ use constant {
     QGE => -3,
 };
 
-our $VERSION = '1.3.1';
+our $VERSION = '1.4.0';
 
 
 
@@ -1735,6 +1735,265 @@ sub call_variants{
     return $self;
 }
 
+=head2 remap
+
+experimental
+
+=cut
+
+sub remap{
+    my $self = shift;
+    my $fa = '/tmp/tmp.fa';
+    my $fq = '/tmp/tmp.fq';
+    open(FA, '>', $fa) or die $!;
+    print FA $self->{con}->string(fasta=>1);
+    close FA;
+    open(FQ, '>', $fq) or die $!;
+    foreach my $aln ( $self->alns ) {
+        print FQ '@',$aln->qname,"\n", $aln->seq, "\n+\n", $aln->qual, "\n";
+    }
+    qx(bwa index $fa >/dev/null 2>&1);
+    open(my $bfh, "bwa mem $fa $fq 2>/dev/null |");
+    my $sp = Sam::Parser->new(fh => $bfh);
+    my $ss = Sam::Seq->new(
+        id => $self->{id},
+        len => length($self->{con}->seq),
+        ref => $self->{con}
+    );
+
+    while ( my $aln = $sp->next_aln ) {
+        next if $aln->is(UNMAP);
+        #print $aln->score,"\n";
+        $ss->add_aln_by_score($aln);
+    }
+    return $ss;
+}
+
+
+=head2 stabilize_variants
+
+Fix noise at SNP-ish positions with close indels etc...
+
+=cut
+
+sub stabilize_variants{
+    my $self = shift;
+    my %p = (
+        min_freq => 2,
+        var_dist => 4,
+        @_
+    );
+
+    my @vpos;
+    my $min_freq = $p{min_freq};
+    my $var_dist = $p{var_dist};
+
+    # call variants
+    my $vars = $self->{vars};
+    my $vcigars = $self->{vcigars};
+
+    for (my $i=0; $i<@$vars; $i++) {
+        if ( @{$self->{freqs}[$i]} > 1) {
+            push @vpos, $i;
+        }
+    }
+    return unless @vpos; # nothing to do
+
+    # get close variants
+    my @vgroups;
+    my @vg = $vpos[0];
+    for (my $j=1;$j<@vpos;$j++){
+        if ($vpos[$j] - $vg[$#vg] > $var_dist) { # not close
+            push @vgroups, [@vg] if @vg >1;
+            @vg = ($vpos[$j]);
+        }else {
+            push @vg, $vpos[$j];
+        }
+    }
+    push @vgroups, [@vg] if @vg >1;
+
+    # get variant group substring coordinates
+    my @vranges = map{ [$_->[0], $_->[@$_-1] - $_->[0] + 1] }@vgroups;
+    # my @vranges = map{
+    #     my $o = $_->[0] > $var_dist ? $_->[0] - $var_dist : 0;
+    #     my $l = $_->[@$_-1] - $_->[0] + 1 + 2*$var_dist;
+    #     my $excess = @$vars - 1 - ($o+$l);
+    #     $l-=$excess if $excess < 0;
+    #     [$o, $l];
+    # }@vgroups;
+
+    my %vars;
+    #@vars{@vpos} = map{{}}@vpos;
+
+    # load alignments with variants
+    foreach my $aln ( $self->alns(1) ) {
+
+        my $o = $aln->pos -1;
+        my @s = $aln->seq_states;
+        my $l = $#s;
+
+        #print "\t" x ($o % 40), join("\t", @s), "\n";
+
+        my @ii;
+        for (my $i=0; $i<@vranges; $i++) {
+            push @ii, $i if Sam::Seq::_is_in_range($vranges[$i], [[$o, $l]]);
+        }
+        next unless @ii;
+
+        my @o = map{[
+            $vranges[$_][0]-$o,
+            $vranges[$_][0]-$o+$vranges[$_][1]-1
+        ]}@ii;
+
+        for (my $k=0; $k<@o; $k++) {
+            my @var = @s[$o[$k][0] .. $o[$k][1]];
+            my $var = join("", @var);
+            $var =~  tr/-//d; # unpad
+            $vars{$ii[$k]}{$var}{states} = \@var unless exists $vars{$ii[$k]}{$var};
+            $vars{$ii[$k]}{$var}{freq}++;
+        }
+    }
+
+    # loop variants and look for best solution(s)
+    for (my $m=0; $m<@vranges; $m++) {
+        my $p = $vranges[$m][0];
+        my $ref = substr($self->ref->seq, $p, $vranges[$m][1]);
+
+        my @vars;
+        foreach my $q (keys %{$vars{$m}} ) {
+            my $f = $vars{$m}{$q}{freq};
+            next if $f < $min_freq;
+            my @q = @{$vars{$m}{$q}{states}};
+            my $q_padded = join("", @q);
+            my $r_padded = $ref;
+            for (my $i=0; $i<@q; $i++) {
+                next unless length($q[$i]) > 1;
+                substr($r_padded, $i+1, 0, '-' x (length($q[$i])-1));
+            }
+            $vars{$m}{$q}{score} = aln2score($r_padded, $q_padded);
+            $vars{$m}{$q}{var} = $q;
+            push @vars, $vars{$m}{$q};
+        }
+        next unless @vars;
+        @vars = sort{$b->{score} <=> $a->{score}}@vars;
+
+        my $var_stable;
+        my $max_score = -10000; # $vars[0]{score};
+        # take all vars <=> take best vars
+
+        my $f = $vranges[$m][0];
+        my $t = $f+$vranges[$m][1]-1;
+        $self->{vars}[$f] = [];
+        $self->{freqs}[$f] = [];
+        my $cov = 0;
+        # ordered by score
+        foreach my $var (@vars) {
+            last if $var->{score} < $max_score;
+            push @{$self->{vars}[$f]}, $var->{var};
+            push @{$self->{freqs}[$f]}, $var->{freq};
+            $cov += $var->{freq};
+
+            my $i = length($var->{var}) -1;
+            my $d = $vranges[$m][1] -1;
+            push @{$self->{vcigar}[$f]},
+                ($i ? $i."I" : '').
+                ($d ? $d."D" : '');
+
+        }
+        $self->{covs}[$f] = $cov;
+        $self->{probs}[$f] = [map{$_/$cov}@{$self->{freqs}[$f]}];
+
+        foreach (($f+1)..$t) {
+            $self->{vars}[$_] = ['-'];
+            $self->{freqs}[$_] = [$cov];
+            $self->{covs}[$_] = $cov;
+        }
+
+        #print join("", map{$_->[0]}@{$ss->{vars}}[$f..$t]),"\n";
+        #print join("", map{$_->[0]}@{$ss->{freqs}}[$f..$t]),"\n";
+        #print Dumper($ss->{vars});
+        #print $var_stable,"\n\n";
+    }
+
+    #use Data::Dumper;
+    #print Dumper(@{$self->{vars}}[@vpos]);
+
+
+    # phase
+
+    ## DEPRECATED
+    # # ambigious variant (same score) - choose random complement
+    # if (@vars > 1 && $vars[0]{score} == $vars[1]{score}) { # ambigious
+    #     my $s1 = join("", @{$vars[0]{states}});
+    #     my $s2 = join("", @{$vars[1]{states}});
+    #     $s1 =~ tr/-//d;
+    #     $s2 =~ tr/-//d;
+
+    #     my $nw = Align::NW->new($s1, $s2, {match => 2, mismatch => -5, gap_open => -3, gap_extend => -4});
+    #     $nw->score;
+    #     $nw->align;
+    #     my $s1_padded = $nw->get_align->{a};
+    #     my $s2_padded = $nw->get_align->{b};
+    #     if ( length($s1_padded) != length($s1) || length($s2_padded) != length($s2) || length($s1_padded) != length($s2_padded)) { # gaps
+    #         use Data::Dumper;
+    #         #print STDERR Dumper($vars[0]{states}, $vars[1]{states}, $nw->get_align, $self->{id});
+    #         $var_stable = $vars[0]{var};
+    #     }else {
+    #         my $sc = '';
+    #         my @s1 = split('', $s1_padded);
+    #         my @s2 = split('', $s2_padded);
+    #         for (my $i=0; $i<@s1; $i++) {
+    #             if ($s1[$i] eq $s2[$i]) {
+    #                 $sc.= $s1[$i];
+    #             }else {
+    #                 #my %snp; @snp{$s1[$i], $s2[$i]} = (1,1);
+    #                 #my @n = grep{! exists $snp{$_}}qw(A T G C);
+    #                 $sc.= ($s1[$i], $s2[$i])[int(rand(2))];
+    #             }
+    #         }
+    #         $var_stable = $sc;
+    #     }
+    # }else { # highest scoring var
+    #     $var_stable = $vars[0]{var};
+    # }
+
+}
+
+
+=head2 aln2score
+
+=cut
+
+sub aln2score{
+    my ($r,$q) = @_;
+
+    # ref gap open/extension
+    my $rg = $r =~ tr/-//;
+    my $ro = $r;
+    $ro =~ tr/-//s;
+    my $rgo = $ro =~ tr/-//;
+    my $rge = $rg - $rgo;
+
+    # qry gap open/extension
+    my $qg = $q =~ tr/-//;
+    my $qo = $q;
+    $qo =~ tr/-//s;
+    my $qgo = $qo =~ tr/-//;
+    my $qge = $qg - $qgo;
+
+    # diffs
+    my $x = $r ^ $q;
+    my $mm = ($x =~ tr/\0//c) - ($rg + $qg);
+    my $ma = length($r) - ($rg + $qg + $mm);
+    my $idy = $ma/($rg + $qg + $mm + $ma);
+    #return ($idy, $ma, $mm, $rgo, $rge, $qgo, $qge);
+    return MA*$ma + MM*$mm + RGO*$rgo + RGE*$rge + QGO*$qgo + QGE*$qge;
+}
+
+
+=head2 _phred_Hx
+
+=cut
 
 sub _phred_Hx{
 	my ($self, $col) = @_;
