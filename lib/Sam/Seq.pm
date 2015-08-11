@@ -32,7 +32,7 @@ use constant {
     QGE => -3,
 };
 
-our $VERSION = '1.1.1';
+our $VERSION = '1.1.2';
 
 
 
@@ -51,15 +51,10 @@ Class for handling sam reference sequences and its aligned reads.
 
   use Sam::Seq;
 
-  my $sp = Sam::Parser->new(fh => \*SAM);
-  my %ss;
+  my $sp = Sam::Parser->new(file => "index.bam");
 
-  while (my %h = $sp->next_header_line('SQ')) {
-      $ss{$h{SN}} = Sam::Seq->new(id=>$h{SN}, len => $h{LN});
-  }
-
-  while (my $aln = $sp->next_aln) {
-      $ss{$aln->rname}->add_aln($aln);
+  while (my $ss = $sp->next_seq){
+    print $ss->consensus;
   }
 
 =cut
