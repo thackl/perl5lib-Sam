@@ -32,7 +32,7 @@ use constant {
     QGE => -3,
 };
 
-our $VERSION = '1.1.2';
+our $VERSION = '1.2.0';
 
 
 
@@ -63,34 +63,20 @@ Class for handling sam reference sequences and its aligned reads.
 ##------------------------------------------------------------------------##
 
 
-=head1 Class ATTRIBUTES
+=head1 Class ATTRIBUTES / METHODS
 
-=head2 $BinSize [20]
+Get/Set ...
 
-=cut
+=head2 BinSize [20]
 
-our $BinSize = 20;
+=head2 MaxCoverage [50]
 
-=head2 $MaxCoverage [50]
-
-=cut
-
-our $MaxCoverage = 50;
-
-=head2 $PhredOffset [33]
-
-=cut
-
-our $PhredOffset = 33;
+=head2 PhredOffset [33]
 
 =head2 InDelTaboo [0.1]
 
 Trim reads to prevent insertions/deletions within the first/last
  InDelTaboo fraction of the read. N=0 deactivates the feature.
-
-=cut
-
-our $InDelTaboo = 0.1;
 
 =head2 InDelTabooLength [undef]
 
@@ -98,223 +84,48 @@ Trim reads to prevent insertions/deletions within the first/last
  InDelTabooLength bps of the read. N=0 deactivates the feature. If defined,
  superceeds relative InDelTaboo
 
-=cut
+=head2 Trim [1]
 
-our $InDelTabooLength = undef;
+Boolean. Toggle trimming, including leading/trailing indels and InDelTaboo.
 
-=head2 $Trim
+=head2 StateMatrixMinAlnLength [50]
 
-Boolean. Deactivate trimming completely, including leading/trailing indels
- and InDelTaboo.
+Alignments shorter than this are not ignored in state matrix construction.
 
-=cut
+=head2 MaxInsLength [0]
 
-our $Trim = 1;
+0 = ignore.
 
-=head2 StateMatrixMinAlnLength
+=head2 FallbackPhred [1]
 
-Alignments shorter than this are not ignored in state matrix construction. Default 50.
+Used if alignment w/o qual is used in quality context
 
-=cut
+=head2 RepCoverage [0]
 
-our $StateMatrixMinAlnLength = 50;
-
-=head2 $MaxInsLength
-
-Default 0, which deactivates the feature.
-
-=cut
-
-our $MaxInsLength = 0;
-
-=head2 $FallbackPhred
-
-Default 1. Used if alignment w/o qual is used in quality context
-
-=cut
-
-our $FallbackPhred = 1;
-
-=head2 $RepCoverage
-
-Default = 0, which deactivates the feature. If set triggers
-filter_rep_region_alns for each region with higher coverage.
-
-=cut
-
-our $RepCoverage = 0;
-
-
-=head2 $MinScore/$MinNScore/$MinNCScore
-
-Minimum score/nscore/ncscore cutoffs for accoring filter_by_n/c/score()
-functions;
-
-=cut
-
-our $MinScore = undef;
-our $MinNScore = undef;
-our $MinNCScore = undef;
-
-# DEPRECATED
-#=head2 %Freqs2phreds
-#
-#p = sqrt(f*120);
-#
-#=cut
-#
-# our %Freqs2phreds;
-# @Freqs2phreds{0..31} = (map{int((($_/50)**(1/2)*50)+0.5)}(0..39));
-# @Freqs2phreds{32..100} = (40)x69;
-# our %Phreds2freqs = reverse  %Freqs2phreds;
-
-=head1 Class METHODS
-
-=cut
-
-=head2 BinSize
-
-Get/Set $Sam::Seq::BinSize. Default 20.
-
-=cut
-
-sub BinSize{
-	my ($class, $size) = @_;
-	$BinSize = $size if defined $size;
-	return $BinSize;
-}
-
-=head2 MaxCoverage
-
-Get/Set $Sam::Seq::MaxCoverage. Default 50.
-
-=cut
-
-sub MaxCoverage{
-	my ($class, $cov) = @_;
-	$MaxCoverage = $cov if defined $cov;
-	return $MaxCoverage;
-}
-
-=head2 PhredOffset
-
-Get/Set $Sam::Seq::PhredOffset. Default 33.
-
-=cut
-
-sub PhredOffset{
-	my ($class, $offset) = @_;
-	$PhredOffset = $offset if defined $offset;
-	return $PhredOffset;
-}
-
-=head2 StateMatrixMinAlnLength
-
-Get/Set $Sam::Seq::StateMatrixMinAlnLength. Default 0.
-
-=cut
-
-sub StateMatrixMinAlnLength{
-	my ($class, $cov) = @_;
-	$StateMatrixMinAlnLength = $cov if defined $cov;
-	return $StateMatrixMinAlnLength;
-}
-
-=head2 RepCoverage
-
-Get/Set $Sam::Seq::RepCoverage. Default 0.
-
-=cut
-
-sub RepCoverage{
-	my ($class, $cov) = @_;
-	$RepCoverage = $cov if defined $cov;
-	return $RepCoverage;
-}
+0 = ignore.
 
 =head2 MinScore/MinNScore/MinNCScore
 
-Get/Set $Sam::Seq::MinScore/MinNScore/MinNCScore. Default undef.
+Minimum score/nscore/ncscore cutoffs for filter_by_n/c/score().
 
 =cut
 
-sub MinScore{
-	my ($class, $score, $force) = @_;
-	$MinScore = $score if defined($score) || $force;
-	return $MinScore;
-}
-
-sub MinNScore{
-	my ($class, $score, $force) = @_;
-	$MinNScore = $score if defined($score) || $force;
-	return $MinNScore;
-}
-
-sub MinNCScore{
-	my ($class, $score, $force) = @_;
-	$MinNCScore = $score if defined($score) || $force;
-	return $MinNCScore;
-}
-
-=head2 InDelTaboo
-
-Get/Set $Sam::Seq::InDelTaboo. Default 10.
-
-=cut
-
-sub InDelTaboo{
-	my ($class, $indeltaboo) = @_;
-	$InDelTaboo = $indeltaboo if defined $indeltaboo;
-	return $InDelTaboo;
-}
-
-=head2 InDelTabooLength
-
-Get/Set $Sam::Seq::InDelTabooLength. Default undef.
-
-=cut
-
-sub InDelTabooLength{
-	my ($class, $indeltaboolength, $force) = @_;
-	$InDelTabooLength = $indeltaboolength if defined $indeltaboolength || $force;
-	return $InDelTabooLength;
-}
-
-=head2 Trim
-
-Get/Set $Sam::Seq::Trim. Default TRUE.
-
-=cut
-
-sub Trim{
-	my ($class, $trim) = @_;
-	$Trim = $trim if defined $trim;
-	return $Trim;
-}
-
-=head2 MaxInsLength
-
-Get/Set $Sam::Seq::MaxInsLength. Default 0, which deactivates the feature.
-
-=cut
-
-sub MaxInsLength{
-	my ($class, $max_ins_length) = @_;
-	$MaxInsLength = $max_ins_length if defined $max_ins_length;
-	return $MaxInsLength;
-}
-
-=head2 FallbackPhred
-
-Get/Set $Sam::Seq::FallbackPhred. Default 1.
-
-=cut
-
-sub FallbackPhred{
-	my ($class, $fbp) = @_;
-	$FallbackPhred = $fbp if defined $fbp;
-	return $FallbackPhred;
-}
+# Class attributes
+our %ATTR_CLASS = (
+    BinSize => 20,
+    MaxCoverage => 50,
+    PhredOffset => 33,
+    InDelTaboo => 0.1,
+    InDelTabooLength => undef,
+    Trim => 1,
+    StateMatrixMinAlnLength => 50,
+    MaxInsLength => 0,
+    FallbackPhred => 1,
+    RepCoverage => 0,
+    MinScore => undef,
+    MinNScore => undef,
+    MinNCScore => undef,
+);
 
 =head2 Freqs2phreds
 
@@ -353,7 +164,8 @@ Return the phred values of the quality string accorting to specified offset.
 
 sub Qual2phreds{
     my $class = shift;
-    return map{$_-=$PhredOffset}unpack("W*", $_[0]);
+    my $po = Sam::Seq->PhredOffset;
+    return map{$_-=$po}unpack("W*", $_[0]);
 }
 
 
@@ -453,6 +265,8 @@ sub State_matrix{
             }
         }
 
+        my $stateMatrixMinAlnLength = Sam::Seq->StateMatrixMinAlnLength;
+
         foreach my $aln (@{$p{alns}}){
 
 		###################
@@ -460,12 +274,12 @@ sub State_matrix{
 		# get read seq
 		my $seq = $aln->seq;
 		my $orig_seq_length = length($seq);
-		next unless $orig_seq_length > $StateMatrixMinAlnLength;
+		next unless $orig_seq_length > $stateMatrixMinAlnLength;
 
                 my $qua = $aln->qual;
 
                 if($qua eq "*"){ # replace missing qual with fallback qual
-                    my $q = Fastq::Seq->Phreds2Char( [$FallbackPhred] , $PhredOffset );
+                    my $q = Fastq::Seq->Phreds2Char( [$ATTR_CLASS{FallbackPhred}] , Sam::Seq->PhredOffset );
                     $qua = $q x $orig_seq_length;
                 }
 
@@ -501,7 +315,7 @@ sub State_matrix{
 		# reference position
 		my $rpos = $aln->pos-1;
 
-		if($Trim){
+		if(Sam::Seq->Trim){
 			##################
 			### InDelTaboo ###
 			# this also removes leading/trailing InDels regardless of InDelTaboo
@@ -509,7 +323,7 @@ sub State_matrix{
 			my $mc = 0;
 			my $dc = 0;
 			my $ic = 0;
-			my $indeltaboolength = $InDelTabooLength ? $InDelTabooLength : int($orig_seq_length * $InDelTaboo + 0.5);
+			my $indeltaboolength = Sam::Seq->InDelTabooLength ? Sam::Seq->InDelTabooLength : int($orig_seq_length * Sam::Seq->InDelTaboo + 0.5);
 			for(my $i=0; $i<@cigar;$i+=2){
 				if($cigar[$i+1] eq 'M'){
 					if($mc + $ic + $cigar[$i] > $indeltaboolength){
@@ -567,7 +381,7 @@ sub State_matrix{
 
 			# have to have kept at least 50 bps and 70% of original read length
 			#  to consider read for state matrix
-			next if length($seq) < $StateMatrixMinAlnLength  || (length($seq)/$orig_seq_length) < 0.7;
+			next if length($seq) < $stateMatrixMinAlnLength  || (length($seq)/$orig_seq_length) < 0.7;
 		}
 
 
@@ -703,10 +517,10 @@ sub new{
 		len => undef,			# length of the reference sequence, required
 		ref => undef,			# reference seq object, Fasta::Seq or Fastq::Seq
 		con => undef,			# consensus seq, Fastq::Seq (+cov)
-		max_coverage => $MaxCoverage,
-		bin_size => $BinSize,
-		bin_max_bases => $BinSize * $MaxCoverage,
-		phred_offset => $PhredOffset,
+		max_coverage => Sam::Seq->MaxCoverage,
+		bin_size => Sam::Seq->BinSize,
+		bin_max_bases => Sam::Seq->BinSize * Sam::Seq->MaxCoverage,
+		phred_offset => Sam::Seq->PhredOffset,
 		is => undef,
 		## custom overwrites
 		@_,
@@ -1089,29 +903,31 @@ computation.
 
 sub filter_by_score{
     my $self = shift;
+    my $min_score = Sam::Seq->MinScore;
     foreach ($self->aln_iids) {
         my $aln = $self->aln_by_iid($_);
         my $score = $aln->score;
-        $self->remove_aln_by_iid($_) if ! defined($score) || $score < $MinScore;
+        $self->remove_aln_by_iid($_) if ! defined($score) || $score < $min_score;
     }
 }
 
 sub filter_by_nscore{
     my $self = shift;
+    my $min_nscore = Sam::Seq->MinNScore;
     foreach ($self->aln_iids) {
         my $aln = $self->aln_by_iid($_);
         my $nscore = $aln->nscore;
-        $self->remove_aln_by_iid($_) if ! defined($nscore) || $nscore < $MinNScore;
+        $self->remove_aln_by_iid($_) if ! defined($nscore) || $nscore < $min_nscore;
     }
 }
 
 sub filter_by_ncscore{
     my $self = shift;
+    my $min_ncscore = Sam::Seq->MinNCScore;
     foreach ($self->aln_iids) {
         my $aln = $self->aln_by_iid($_);
         my $ncscore = $aln->ncscore;
-        $self->remove_aln_by_iid($_) if ! defined($ncscore) || $ncscore < $MinNCScore;
-
+        $self->remove_aln_by_iid($_) if ! defined($ncscore) || $ncscore < $min_ncscore;
     }
 }
 
@@ -1141,7 +957,7 @@ sub filter_rep_region_alns{
 
     # get repetitive regions
     my @cov = $self->coverage(1);
-    my $cmax = $RepCoverage;
+    my $cmax = Sam::Seq->RepCoverage;
     my $high = 0;
     my @rwin;
 
@@ -1740,8 +1556,8 @@ sub _haplo_consensus{
         Fastq::Seq->Phreds2Char( [Sam::Seq->Freqs2phreds(@freqs)] , $self->{phred_offset} ),
         cov => Fastq::Seq->Phreds2Char([@freqs], $self->{phred_offset}),
         phred_offset => $self->{phred_offset},
-        #trace => $trace,
-        #cigar => Sam::Seq->Trace2cigar($trace),
+        trace => $trace,
+        cigar => Sam::Seq->Trace2cigar($trace),
     );
 }
 
@@ -1773,6 +1589,7 @@ sub _consensus{
 		my $i;
 		my $cov;
 
+                my $max_ins_length = Sam::Seq->MaxInsLength;
 		# majority vote
 		for($i=0; $i<@$col; $i++){
 			# get all defined states
@@ -1788,7 +1605,7 @@ sub _consensus{
 					# gaps should not be considered.
 					# Insert state has to have idx > 4 (not A,T,G,C or -)
 					# for check to make sense
-					next if($MaxInsLength && $i > 4 && length $states_rev{$i} > $MaxInsLength);
+					next if($max_ins_length && $i > 4 && length $states_rev{$i} > $max_ins_length);
 
 					$max_freq = $freq;
 					$idx = $i;
@@ -2004,6 +1821,40 @@ sub _is_in_range{
     }
     return 0;
 }
+
+=head2 stringify_state_matrix
+
+=cut
+
+sub stringify_state_matrix{
+    my ($self) = @_;
+    print join(" ", map{$_ || '.'}@$_),"\n" for @{$self->{_state_matrix}};
+}
+
+
+
+
+
+##----------------------------------------------------------------------------##
+## Closures
+
+sub _init_closures{
+    no strict 'refs';
+
+    foreach my $attr ( keys %ATTR_CLASS ){
+        next if __PACKAGE__->can($attr); # don't overwrite explicitly declared methods
+        *{__PACKAGE__ . "::$attr"} = sub {
+            die (((caller 0)[3])." expects a single value, got @_\n") if @_>2;
+            $ATTR_CLASS{$attr} = $_[1] if @_ == 2;
+            return $ATTR_CLASS{$attr};
+        }
+    }
+
+    # might wann treat ARRAYs and HASHs differently
+}
+
+
+__PACKAGE__->_init_closures(); # close to eof
 
 ##------------------------------------------------------------------------##
 
