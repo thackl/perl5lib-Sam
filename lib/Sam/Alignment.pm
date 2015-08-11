@@ -7,7 +7,7 @@ use overload
     'bool' => sub{1},
     '""' => \&string;
 
-our $VERSION = '1.1.2';
+our $VERSION = '1.1.3';
 
 =head1 NAME
 
@@ -79,9 +79,10 @@ Returns a sam alignment object. For more informations on the sam format see
 =cut
 
 my @ATTR_SCALAR = qw(qname flag rname pos mapq cigar rnext pnext tlen seq qual opt);
+my @ATTR_SCALAR_def = (qw(* 0 * 0 255 * * 0 0 * *), undef);
 
 my %SELF;
-@SELF{@ATTR_SCALAR} = (undef) x scalar @ATTR_SCALAR;
+@SELF{@ATTR_SCALAR} = @ATTR_SCALAR_def;
 
 sub new{
 	my $class = shift;
@@ -93,6 +94,8 @@ sub new{
 		my %sam;
 		@sam{@ATTR_SCALAR} = split("\t",$sam, 12);
 		$self = \%sam;
+                $self->{qual} //= "*";
+
 	}else{ # input is key -> hash structure
             $self = {
                 %SELF,
@@ -102,7 +105,6 @@ sub new{
 	}
 	# overwrite defaults
 
-        $self->{qual} //= "*";
 
 	return bless $self, $class;
 }
