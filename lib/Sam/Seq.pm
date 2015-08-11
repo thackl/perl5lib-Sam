@@ -32,7 +32,7 @@ use constant {
     QGE => -3,
 };
 
-our $VERSION = '1.4.0';
+our $VERSION = '1.4.1';
 
 
 
@@ -681,23 +681,22 @@ sub haplo_consensus{
 
 	$self->_add_pre_calc_fq(@{$p{hcrs}}) if $p{hcrs};
 
-        # get variants
-        $self->variants(reuse_matrix => 1);
-        $self->penalize_variants();
-        my $hc = $self->haplo_coverage(reuse_matrix => 1);
-        $self->filter_by_coverage($hc) if $hc;
-
-        # recall
-	$self->_init_state_matrix(
-                                  ignore_coords => $p{ignore_coords},
-                                  qual_weighted => $p{qual_weighted},
-                                  use_ref_qual => $p{use_ref_qual},
-                                 );
-        $self->variants(
+         # get variants
+        $self->call_variants(
+            reuse_matrix => 1,
             min_prob => 0.2,
-            min_freq => 2,
+            min_freq => 3,
         );
-	$self->_haplo_consensus;
+
+        $self->stabilize_variants; # fix noise at SNPs with close indels
+
+	$self->variant_consensus;
+
+        my $ss = $self->remap;
+        my $hp = $ss->haplo_coverage;
+        $ss->filter_by_coverage($hp);
+
+        $ss->consensus;
 
 	return $self->{con};
 
@@ -1502,47 +1501,46 @@ sub _add_pre_calc_fq{
 }
 
 
-=head2 _haplo_consensus
+=head2 variant_consensus
+
+Call consensus from variants. Requires ->call_variants() first.
 
 =cut
 
-sub _haplo_consensus{
+sub variant_consensus{
     my $self = shift;
-    my %states_rev = reverse %{$self->{_states}}; # works since values are also unique
     my $seq = '';
     my @freqs;
-    my $trace;
+    my $trace = '';
 
     my $vcovs = $self->{covs};
     my $vvars = $self->{vars};
     my $vfreqs = $self->{freqs};
+
+    die (((caller 0)[3]).": ->call_variants() required\n") unless @$vvars;
 
     for (my $i=0; $i<$self->len; $i++){
         # uncovered col
         unless ($vcovs->[$i]){
             $seq.= $self->{ref} ? substr($self->{ref}{seq}, $i, 1) : 'n';
             push @freqs, 0;
-            #$trace.='M';
+            $trace.='0';
             next;
         }
-        # TODO MaxInsertSize
 
-        my $j = 0;
-        if ($self->{ref} && @{$vvars->[$i]} >1) { # SNVs
-            my $r = substr($self->{ref}{seq}, $i, 1);
-            for (my $k=0; $k<@{$vvars->[$i]};$k++) { # loop through SNVs
-                if ($vvars->[$i][$k] eq $r){ # find first ref matching state
-                    $j=$k;
-                    last;
-                }
-            }
+        # TODO MaxInsertSize
+        my $v = $vvars->[$i][0];
+
+        next if $v eq '-';
+
+        if (length($v) > 1) {
+             $trace.= 'I' x length($v);
+        }else {
+             $trace.= substr($self->{ref}{seq}, $i, 1) eq $vvars->[$i][0] ? '=' : 'X';
         }
 
-        #print STDERR "$i\t$vvars->[$i][$j] : @{$vvars->[$i]} @{$vfreqs->[$i]}\n" if $j;
-        $seq.= $vvars->[$i][$j];
-        push @freqs, $vfreqs->[$i][$j];
-
-
+        $seq.= $v;
+        push @freqs, ($vcovs->[$i]) x length($v);
     }
 
     $self->{con} = Fastq::Seq->new(
