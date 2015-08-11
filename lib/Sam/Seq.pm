@@ -32,7 +32,7 @@ use constant {
     QGE => -3,
 };
 
-our $VERSION = '1.2.1';
+our $VERSION = '1.3.1';
 
 
 
@@ -1140,7 +1140,7 @@ sub haplo_coverage{
     my @hpl_cov;
 
     # compute all variants
-    $self->variants(min_freq => 4);
+    $self->call_variants(min_freq => 4);
     my @ref_seq = split(//, $self->ref->seq);
 
     for ( my $i=0; $i<@{$self->{vars}}; $i++) {
@@ -1656,22 +1656,23 @@ sub state_matrix_consensus{
 }
 
 
-=head2 variants
+=head2 call_variants
 
 By default the state matrix is calculated, wether or not it has been computed
  before. Set C<reuse_matrix => 1> to prevent unneccessary recalculation.
 
 =cut
 
-*_variants = \&variants; # backward comp
+*_variants = \&call_variants; # backward comp
 
-sub variants{
+sub call_variants{
     my $self = shift;
     die __PACKAGE__."->verbose: uneven number of options: @_" if @_%2;
 
     my %p = (
         min_prob => 0,
         min_freq => 4,
+        or_min => 0,
         reuse_matrix => 0,
         @_
     );
@@ -1717,7 +1718,11 @@ sub variants{
 
         if($p{min_prob}){
             my $kp = grep{$_>= $p{min_prob}}@probs;
-            $k = $kp if $kp < $k;
+            if ($p{or_min}) {
+                $k = $kp if $kp > $k; # min-prob superseeds
+            }else {
+                $k = $kp if $kp < $k; # min-prob superseeds
+            }
         }
 
         $k--;
