@@ -481,16 +481,9 @@ Returns a Sam::Seq object.
   len => undef,           # length of the reference sequence, required
   ref => undef,           # reference seq object, Fasta::Seq or Fastq::Seq
   con => undef,           # consensus seq, Fastq::Seq (+cov)
-  ref_merge_regions => [],# regions in the ref seq, to be included in
-                          #  consensus calling, ARRAY of Tuples (start, offset)
-  max_coverage => 50,     # assumed maximum coverage value for consensus
-                          #  quality value calculation
-  is => undef,            # see Sam::Parser->is()
-
-  bin_size => $Sam::Seq::BinSize,
-  bin_max_coverage => $Sam::Seq::BinMaxCoverage,
-  phred_offset => $Sam::Seq::PhredOffset,
-
+  max_coverage => Sam::Seq->MaxCoverage,
+  bin_size => Sam::Seq->BinSize,
+  phred_offset => Sam::Seq->PhredOffset,
 
 =cut
 
@@ -736,7 +729,8 @@ sub consensus{
                                  );
 
 	$self->_add_pre_calc_fq(@{$p{hcrs}}) if $p{hcrs};
-	$self->_consensus;
+        $self->state_matrix_consensus();
+
 	return $self->{con};
 }
 
@@ -1564,11 +1558,16 @@ sub _haplo_consensus{
 }
 
 
-=head2 _consensus
+=head2 state_matrix_consensus
 
 =cut
 
-sub _consensus{
+{ # alias for backward comp.
+    no warnings 'once';
+    *_consensus = \&legacy_consensus;
+}
+
+sub state_matrix_consensus{
 	my $self = shift;
 	my %states_rev = reverse %{$self->{_states}}; # works since values are also unique
 	my $seq = '';
