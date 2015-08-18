@@ -10,198 +10,289 @@ use constant {
     HPL => 2,
     SCORE => 3,
     HPL_IDX => 4,
-    MIN_FRAG_OVL => 2,
+    FRAG_MIN_OVL => 2,
+    FRAG_MIN_LEN => 3,
+    FRAG_MIN_MAX_OVL_FRAC => .75
 };
 
+print "SRAND: ", srand(),"\n";
+# SEEDs with errors:
+# 1348286397
+
 my $v1 = "AT"x30;
-my $v2 = $v1;
-$v2 =~ tr/ATGC/TACG/; # simply complement
-
-srand(5);
-
 my $cov = 5;
-my $f_len = 6;
+my $f_len = 8;
 my $n = length($v1)*$cov/$f_len;
 
-my $frags = sim_frags(ref => $v1, length => $f_len, n => $n);
-$frags = filter_frags(frags => $frags, min_length => 3);
-$frags = assign_frag_states(frags => $frags, ref => $v1);
-print $v1,"\n";
-print_frags(frags => $frags, ref => $v1);
+my $frags_all = sim_frags(ref => $v1, length => $f_len, n => $n);
 
-# use longest frag as seed frag
-my $c=0;
-while (@$frags) {
-    last if $c++ > 2;
-    my $frag_longest_idx = (sort{length($frags->[$b][0]) <=> length($frags->[$a][0])}(0..$#$frags))[0];
-    print_frags(frags => $frags, ref => $v1);
+substr($v1, 5, 1, "G");
+substr($v1, 15, 1, "G");
 
-    print @$frags." $frag_longest_idx\n";
+# run through frags block-wise
+# filter by length, ...
+# push @block_frags if overlapping
+my $frags = [];
+my $max_end;
+my $max_len;
+my $max_len_i;
+my $i;
+my @haplotypes;
 
-    my ($hpl, $idx_from, $idx_to) = compute_local_haplotype( frags => $frags, seed_idx => $frag_longest_idx );
-    print_haplotypes(hpl => $hpl, pos => $frags->[$frag_longest_idx][POS], ref => $v1);
-    print_frags(frags => [@{$frags}[$idx_from .. $idx_to]], ref => $v1);
+# frag blocks;
+foreach my $frag (@$frags_all) {
+    next unless length($frag->{seq}) > FRAG_MIN_LEN;
 
-    my $len = $idx_to - $idx_from;
-    splice(@$frags, $idx_from, $len);
+    if ( @$frags && $max_end - $frag->{pos} > FRAG_MIN_OVL-2 ) { # >3bp overlap
+        $i++;
+        $max_end = $frag->{end} if $frag->{end} > $max_end;
+        if ( length($frag->{seq}) > $max_len ){
+            $max_len = length($frag->{seq});
+            $max_len_i = $i;
+        }
+        push @$frags, $frag;
+        next;
+    }
 
+    if (@$frags) {
+        push @haplotypes, compute_local_haplotype(frags => $frags, seed_idx => $max_len_i);
+    }
+    
+    $i = 0;
+    $frags = [$frag];
+    $max_end = $frag->{end};
+    $max_len = length($frag->{seq});
+    $max_len_i = $i;
 }
+
+# in case we exited for loop on short frag
+if (@$frags) {
+    push @haplotypes, compute_local_haplotype(frags => $frags, seed_idx => $max_len_i);            
+}
+
+#print Dumper(\@haplotypes);
+
+print_frags(frags => \@haplotypes, use_hpl => 1, label => "haplotypes");
 
 
 ##----------------------------------------------------------------------------##
 
 sub compute_local_haplotype{
     my %p = (@_);
-    my $idx = $p{seed_idx};
     my $frags = $p{frags};
 
+    #print "\ncompute_local_haplotype(seed_idx => $p{seed_idx})\n";
 
-    my @hpl = ($frags->[$idx][2], $frags->[$idx][2], [], []);
-    $hpl[1] =~ tr/10/01/;
-    my $pos = $frags->[$idx][1];
-    my $f_max_len = $frags->[$idx][2];
+    add_frag_haplotypes(frags => $frags, ref => $v1);
+    #print_frags(frags => $frags, max_len => length($v1), use_hpl => 1, label => "[local frags]");
+    
+    # seed
+    my $hpl = {%{$frags->[$p{seed_idx}]}};
+    $hpl->{hplc} = $hpl->{hpl};
+    $hpl->{hplc} =~ tr/10/01/;
+    $hpl->{frags} = [];
+    my $f_max_len = length($hpl->{seq});
 
     # use max ref similar (most "1") complement as h[0];
-    if ($hpl[0] =~ tr/1// < $hpl[1] =~ tr/1//){
-        @hpl = ($hpl[1], $hpl[0]);
+    if ($hpl->{hpl} =~ tr/1// < $hpl->{hplc} =~ tr/1//){
+        ($hpl->{hpl}, $hpl->{hplc}) = ($hpl->{hplc}, $hpl->{hpl});
     }
 
-    # limit search space of potentially overlapping frags
-    # I know length of longest frag - frags farther away cannot overlap
-    # start of fragment range: [h_start - longest_frag + min_ovl, h_end - min_ovl]
-
-    # only use frags with at least 2bp overlap
-    my ($xp1, $xp2) = extender_range_pre(hpl => \@hpl, pos => $pos, idx => $idx);
-    my ($xs1, $xs2) = extender_range_suf(hpl => \@hpl, pos => $pos, idx => $idx, frags => $frags);
-
-    my @xfrags = (); # extendy frags
-    push @xfrags, @{$frags}[$xp1..$xp2, $xs1..$xs2];
-
-    print_haplotypes(hpl => \@hpl, pos => $pos, ref => $v1);
-    #print_frags(frags => \@xfrags, ref => $v1);
-
-    # end init
+    if (@$frags == 1) { # short-circuit singletons
+        return $hpl;
+    }
     
-    my $c = 0;
-    while (@xfrags) {
-        #last if ++$c > 12;
-        score_frags_vs_haplotype(frags => \@xfrags, hpl => \@hpl, pos => $pos);
+    #print_frags(frags => [$hpl], max_len => length($v1), use_hpl => 1); #, label => "[seed frag]");
 
-        # loop to frags, look for best extender, at the same time assign containees
-        my $max_score = 0;
-        my $max_score_idx;
-        my @keep_idx;
-        for (my $i=$#xfrags; $i; $i--) {
-            if (
-                $xfrags[$i][POS] >= $pos &&
-                    $xfrags[$i][POS]+length($xfrags[$i][HPL]) <= $pos + length ($hpl[0])
-                ) {             # containee
-                push @{$hpl[$xfrags[$i][POS]+2]}, $xfrags[$i];
-            } else {
-                if ($xfrags[$i][SCORE] > $max_score) {
-                    $max_score = $xfrags[$i][SCORE];
-                    push @keep_idx, $max_score_idx if defined($max_score_idx);
-                    $max_score_idx = $i;
-                } else {
-                    push @keep_idx, $i;
-                }
-            }
-        }
+    extend_suf(hpl => $hpl, frags => $frags, last_idx => $p{seed_idx});
+    #print_frags(frags => [$hpl], max_len => length($v1), use_hpl => 1); #, label => "[sufx frag]");
 
-        my $is_pre = 0;
-        if ( defined $max_score_idx ) {
-            my $xfrag = $xfrags[$max_score_idx];
-            push @{$hpl[$xfrags[$max_score_idx][POS]+2]}, $xfrag;
+    my $max_look_behind = length($frags->[$p{seed_idx}]{seq}) - FRAG_MIN_OVL;
+    extend_pre(hpl => $hpl, frags => $frags, first_idx => $p{seed_idx}, max_look_behind => $max_look_behind);
+    print_frags(frags => [$hpl], max_len => length($v1), use_hpl => 1); #, label => "[prex frag]");
 
-            # DONE: assign max score frag and extend hpl
-            my $shift = $xfrag->[POS] - $pos;
-            if ( $shift <0  ) { # prepend
-                $is_pre++;
-                my $pre = substr($xfrag->[HPL], 0, abs($shift));
-                my $pre_c = $pre;
-                $pre_c =~ tr/10/01/;
-                $hpl[$xfrag->[HPL_IDX]].= $pre; 
-                $hpl[! $xfrag->[HPL_IDX]].= $pre_c;
+    return $hpl;
+}
 
-                $pos = $xfrag->[POS];
-                $idx = $max_score_idx;
-            } else {            # append
-                my $shift = length($xfrag->[HPL]) - length($hpl[0]) + $shift;
-                my $suf = substr($xfrag->[HPL], -$shift);
-                my $suf_c = $suf;
-                $suf_c =~ tr/10/01/;
-                $hpl[$xfrag->[HPL_IDX]].= $suf; 
-                $hpl[! $xfrag->[HPL_IDX]].= $suf_c;
-            }
+
+
+sub extend_pre{
+    my %p = (reuse_frags => [], @_);
+    my $hpl = $p{hpl};
+    my $f = $p{frags};
+
+    # look back x frags for best ovl
+    my $i;
+    my $max_ovl = 0;
+    my $min_ovl_i = $p{first_idx};
+    for ($i=$p{first_idx}-1; $i>=0; $i--) {
+        # can't use ovl in look-behind
+        # --0000000------ < valid but missed
+        # --1111--------- 
+        # --11111-------- < no ovl
+        # -------1111111-
+        # my $ovl =  $f->[$i]->{end} - $hpl->{pos} + 1; # min ovl
+        # last if $ovl < FRAG_MIN_OVL;
+
+        my $ovl = $hpl->{end} - $f->[$i]->{pos} + 1; # min ovl
+        unless ( $ovl < FRAG_MIN_OVL ){ # seen a frag with valid ovl
+            $min_ovl_i = $i;
         }
         
-        # DONE: remove containees and assigned max score frag, keep rest
-        @xfrags = @xfrags[@keep_idx];
-        
-        # TODO: update extender_range and xfrags
-        if ( $is_pre ) {
-            ($xp1, $xp2) = extender_range_pre(hpl => \@hpl, pos => $pos, idx => $xp1);
-            push @xfrags, @{$frags}[$xp1..$xp2];
-        } else {
-            ($xs1, $xs2) = extender_range_suf(hpl => \@hpl, pos => $pos, idx => $xs2, frags => $frags);
-            push @xfrags, @{$frags}[$xs1..$xs2];
+        last if $f->[$i]{pos} < $hpl->{pos} - $p{max_look_behind};
+    }
+    $i = $min_ovl_i;
+    
+    my $x_all = $p{reuse_frags};
+    if ( $i < $p{first_idx}) { # new extender
+        unshift @$x_all, @{$frags}[$i .. $p{first_idx}-1];
+    }
+    return unless @$x_all;
+
+    # potential extenders
+    my $x_pot = [];
+    my $x_con = [];
+
+    # remove containees
+    foreach ( @$x_all ) {
+        if ( $_->{pos} < $hpl->{pos} ){
+            push @$x_pot, $_;
+        }else {
+            push @$x_con, $_;
         }
-        
-        #print_haplotypes(hpl => \@hpl, pos => $pos, ref => $v1);
-        #print_frags(frags => \@xfrags, ref => $v1);
     }
 
-    return (\@hpl, $xp1, $xs2);
+    #print_frags(frags => $x_con, use_hpl => 1, label => "[containee frags]");
+    return unless @$x_pot;
+    score_frags(frags => $x_pot, hpl => $hpl);
+    my $x_best;
+    ($x_best, @$x_pot) = @{$x_pot}[sort { $x_pot->[$b]{score} <=> $x_pot->[$a]{score} || length($x_pot->[$b]{seq}) <=> length($x_pot->[$a]{seq}) }(0..$#$x_pot)];
+    
+    #print_frags(frags => [$x_best], use_hpl => 1, use_scores => 1, label => "[pre-xtend best]", max_len => length($v1));
+    #print_frags(frags => $x_pot, use_hpl => 1, use_scores => 1, label => "[pre-xtend sub]", max_len => length($v1));
+
+    my $x_len = $hpl->{pos} - $x_best->{pos};  # extension length
+    my $x_hpl = substr($x_best->{hpl}, 0, $x_len);
+    my $x_hplc = $x_hpl;
+    $x_hplc =~ tr/10/01/;
+    
+    $hpl->{pos} = $x_best->{pos}; # set new end
+    if ( $x_best->{flip} ) {
+        $hpl->{hpl} = $x_hplc.$hpl->{hpl};
+        $hpl->{hplc} = $x_hpl.$hpl->{hplc};
+    }else {
+        $hpl->{hpl} = $x_hpl.$hpl->{hpl};
+        $hpl->{hplc} = $x_hplc.$hpl->{hplc};
+    }
+
+    #print_frags(frags => [$hpl], use_hpl => 1, use_scores => 1, label => "[extended hpl]", max_len => length($v1));
+    # TODO: frag assignment
+    
+    extend_pre(hpl => $hpl, frags => $p{frags}, first_idx => $i, reuse_frags => $x_pot, max_look_behind => $p{max_look_behind});
+}
+
+sub extend_suf{
+    my %p = (reuse_frags => [], @_);
+    my $hpl = $p{hpl};
+    my $f = $p{frags};
+
+    # look at the next x frags for best ovl
+    my $i;
+    my $max_ovl = 0;
+    for ($i=$p{last_idx}+1; $i<@$f; $i++) {
+        # filter prior:
+        # next if length($f[$i]->{seq}) < FRAG_MIN_LEN; # ignore shorties
+
+        my $ovl = $hpl->{end} - $f->[$i]{pos} + 1; # min ovl
+        last if $ovl < FRAG_MIN_OVL;
+
+        # probably insignificant pros causes trouble with containees
+        #  111111
+        #  11111      # strong containee
+        #     111111  # week extendee
+        #if ($ovl >= $max_ovl ){
+        #    $max_ovl = $ovl
+        #}else {
+        #    last if $ovl < FRAG_MIN_MAX_OVL_FRAC * $max_ovl;             
+        #}
+    }
+    $i--;
+
+    my $x_all = $p{reuse_frags};
+    if ( $i > $p{last_idx}) { # new extenders
+        push @$x_all, @{$frags}[$p{last_idx}+1 .. $i ];
+    }
+
+    return unless @$x_all;
+
+    # potential extenders
+    my $x_pot = [];
+    my $x_con = [];
+
+    # remove containees
+    foreach ( @$x_all ) {
+        if ( $_->{end} > $hpl->{end} ){
+            push @$x_pot, $_;
+        }else {
+            push @$x_con, $_;
+        }
+    }
+
+    #print_frags(frags => $x_con, use_hpl => 1, label => "[containee frags]");
+    return unless @$x_pot;
+    score_frags(frags => $x_pot, hpl => $hpl);
+    my $x_best;
+    ($x_best, @$x_pot) = @{$x_pot}[sort { $x_pot->[$b]{score} <=> $x_pot->[$a]{score} || length($x_pot->[$b]{seq}) <=> length($x_pot->[$a]{seq}) }(0..$#$x_pot)];
+    
+    #print_frags(frags => [$x_best], use_hpl => 1, use_scores => 1, label => "[suf-xtend best]", max_len => length($v1));
+    #print_frags(frags => $x_pot, use_hpl => 1, use_scores => 1, label => "[suf-xtend sub]", max_len => length($v1));
+
+    my $x_len = $x_best->{end} - $hpl->{end}; # extension length
+    my $x_hpl = substr($x_best->{hpl}, -$x_len);
+    my $x_hplc = $x_hpl;
+    $x_hplc =~ tr/10/01/;
+    
+    $hpl->{end} = $x_best->{end}; # set new end
+    if ( $x_best->{flip} ) {
+        $hpl->{hpl}.= $x_hplc;
+        $hpl->{hplc}.= $x_hpl;
+    }else {
+        $hpl->{hpl}.= $x_hpl;
+        $hpl->{hplc}.= $x_hplc;
+    }
+
+    #print_frags(frags => [$hpl], use_hpl => 1, use_scores => 1, label => "[extended hpl]", max_len => length($v1));
+    # TODO: frag assignment
+    
+    extend_suf(hpl => $hpl, frags => $p{frags}, last_idx => $i, reuse_frags => $x_pot);
 }
 
 
-
-sub extender_range_suf{
-    my %p = (@_); # pos, idx, hpl, frags
-    my $pos_max = $p{pos} + length($p{hpl}[0]) - MIN_FRAG_OVL;
-    my $idx_suf_min = $p{idx} + 1;
-    $idx_suf_min = $#$frags if $idx_suf_min > $#$frags;
-    my $idx_suf_max = $idx_suf_min;
-    while($idx_suf_max < @{$p{frags}} && $frags->[$idx_suf_max][POS] < $pos_max){ $idx_suf_max++ };
-    $idx_suf_max--;
-    return ($idx_suf_min, $idx_suf_max);
-}
-
-sub extender_range_pre{
-    my %p = (@_); # pos, idx, hpl
-    my $pos_min = $p{pos} - length($p{hpl}[0]) + MIN_FRAG_OVL;
-    my $idx_pre_max = $p{idx} - 1;
-    $idx_pre_max = 0 if $idx_pre_max < 0;
-    my $idx_pre_min = $idx_pre_max;
-    while($idx_pre_min && $frags->[$idx_pre_min][POS] > $pos_min){ $idx_pre_min-- };
-    $idx_pre_min++;
-    return ($idx_pre_min, $idx_pre_max);
-}
-
-
-sub score_frags_vs_haplotype{
+sub score_frags{
     my %p = (@_);
     foreach (@{$p{frags}}) {
-        my $shift = $p{pos} - $_->[POS];
+        my $shift = $p{hpl}{pos} - $_->{pos};
         my ($m1, $m2);
-        if ($shift < 0){ # pre
-            my $s1 = substr($_->[HPL], 0, abs($shift)) ^ $p{hpl}[0];
+        if ($shift > 0){ # pre
+            #print "prefix\n",substr($_->{hpl}, abs($shift)),"\n",$_->{hpl},"\n";
+            my $s1 = substr($_->{hpl}, 0, abs($shift)) ^ $p{hpl}{hpl};
             $m1 = $s1 =~ tr/\0//; # count matches
-            my $s2 = substr($_->[HPL], 0, abs($shift)) ^ $p{hpl}[1];
+            my $s2 = substr($_->{hpl}, 0, abs($shift)) ^ $p{hpl}{hplc};
             $m2 = $s2 =~ tr/\0//; # count matches
-        }else { # suf
-            my $s1 = substr($p{hpl}[0], 0, abs($shift)) ^ $_->[HPL];
+        } else { # suf or containee
+            #print "suffix\n",substr($p{hpl}{hpl}, abs($shift)),"\n",$_->{hpl},"\n";
+            my $s1 = substr($p{hpl}{hpl}, abs($shift)) ^ $_->{hpl};
             $m1 = $s1 =~ tr/\0//; # count matches
-            my $s2 = substr($p{hpl}[1], 0, abs($shift)) ^ $_->[HPL];
+            my $s2 = substr($p{hpl}{hplc}, abs($shift)) ^ $_->{hpl};
             $m2 = $s2 =~ tr/\0//; # count matches
         }
-
+        
         if($m2 < $m1){
-            $_->[SCORE] =  $m1;
-            $_->[HPL_IDX] = 0;
+            $_->{score} =  $m1;
+            $_->{flip} = 0;
         }else {
-            $_->[SCORE] = $m2;
-            $_->[HPL_IDX] = 1;
+            $_->{score} = $m2;
+            $_->{flip} = 1;
         } 
     }
 }
@@ -216,44 +307,51 @@ sub print_haplotypes{
    
 sub print_frags{
     my %p = (@_);
-    my $max_len = length($p{ref});
-    print "FRAGS\n";
+    print $p{label},"\n" if $p{label};
     foreach (@{$p{frags}}) {
-        my ($f, $p, $h) = @$_;
-
-        my $suf = $max_len - ($p + length($h));
-        print "-" x $p , $h, "-" x $suf,"\n";
+        my $k = $p{use_hpl} ? "hpl" : "seq";
+        my $suf = $p{max_len} ? $p{max_len} - ($_->{pos} + length($_->{$k})) : 0;
+        my $score = "";
+        if ( $p{use_scores} && exists $_->{score} ) {
+            $score = " [$_->{score}]". ($_->{flip} ? " !" : "");
+        }
+        print "-" x $_->{pos} , $_->{$k}, "-" x $suf,$score,"\n";
     }
 }    
 
 sub sim_frags{
     my %p = (@_);
     my $max = length($p{ref})+$p{length}-1;
-    my @p = sort{$a <=> $b} map{ int(rand($max)) - $p{length} +1}(1..$p{n});
+    my @p = sort{$a <=> $b} map{ int(rand($max)) - $p{length}+1}(0..$p{n});
     my @f;
     for (my $i=0; $i<@p; $i++) {
-        my ($p, $l) = ($p[$i], $p{length});
+        my ($p, $l) = ($p[$i], int(rand($p{length}-2))+3 );
+
         if ( $p < 0 ) { # short fragments at start
             $l += $p; $p=0
         }
         if ( (my $ovh = $p + $l - length($p{ref})) > 0) { # short frags at end
             $l-=$ovh;
         }
-        push @f, [substr($p{ref}, $p, $l), $p];
-        $f[-1][0] =~ tr/ATGC/TACG/ if int(rand(2));
+        next if $l<1;
+        my $f = {
+            seq => substr($p{ref}, $p, $l),
+            pos => $p
+        };
+        $f->{seq} =~ tr/ATGC/TACG/ if int(rand(2)); # randomize strand
+        $f->{end} = $p + length($f->{seq}) -1;
+        push @f, $f;
     }
     return \@f;
 }
 
-sub assign_frag_states{
+sub add_frag_haplotypes{
     my %p = (@_);
     foreach (@{$p{frags}}) {
-        my ($f, $p) = @$_;
-        
-        my $dx = substr($p{ref}, $p, length($f)) ^ $f;
+        my $dx = substr($p{ref}, $_->{pos}, length($_->{seq})) ^ $_->{seq};
         $dx =~ tr/\0/0/c;
         $dx =~ tr/\0/1/;
-        $_->[2] = $dx;
+        $_->{hpl} = $dx;
     };
     return $frags;
 }
@@ -262,3 +360,5 @@ sub filter_frags{
     my %p = (@_);
     return [grep{length($_->[0]) >2}@{$p{frags}}];
 }
+
+
