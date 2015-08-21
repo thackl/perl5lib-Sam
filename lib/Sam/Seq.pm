@@ -1689,11 +1689,11 @@ sub call_variants{
 
     foreach my $col (@{$self->{_state_matrix}}) {
         # cov
-        unless($col){
+        unless($col && @$col){
             push @{$self->{covs}}, 0;
-            push @{$self->{vars}}, ['?'];
-            push @{$self->{freqs}},[''];
-            push @{$self->{probs}},[''];
+            push @{$self->{vars}}, [];
+            push @{$self->{freqs}},[];
+            push @{$self->{probs}},[];
             next;
         }
 
