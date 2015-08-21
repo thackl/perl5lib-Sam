@@ -34,7 +34,7 @@ use constant {
     QGE => -3,
 };
 
-our $VERSION = '1.4.1';
+our $VERSION = '1.5.0';
 
 
 
@@ -1979,6 +1979,22 @@ sub stabilize_variants{
 
 }
 
+=head2 stable_ref_states
+
+=cut
+
+sub stable_ref_states{
+    my $self = shift;
+    die (((caller 0)[3]).": ref required\n") unless $self->ref;
+
+    my @s = split(//, $self->ref->seq);
+
+    foreach ( @{$self->{var_stabilize_ranges}} ) {
+        $s[$_->[0]] = join("", @s[$_->[0] .. $_->[0]+$_->[1]-1]);
+        @s[$_->[0]+1 .. $_->[0]+$_->[1]-1] = ('') x $_->[1];
+    }
+    return @s;
+}
 
 =head2 aln2score
 
