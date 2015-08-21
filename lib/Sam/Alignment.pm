@@ -11,7 +11,7 @@ use constant {
     GAP => '', # or '-'
 };
 
-our $VERSION = '1.1.4';
+our $VERSION = '1.1.5';
 
 =head1 NAME
 
@@ -455,10 +455,14 @@ sub seq_aligned{
         $pos+=$1; # account for softclip
     }
 
-    while ($cigar =~ /(\d+)([MDI])/g) {
-        if ($2 eq "I") { $pos+= $1 };
-        if ($2 eq "M") { $aseq.= substr($seq, $pos, $1); $pos+=$1 }
-        if ($2 eq "D") { $aseq.= "-" x $1; }
+    while ($cigar =~ /(\d+)([MDIX=])/g) {
+        if ($2 eq "I") {
+            $pos+= $1
+        } elsif ($2 eq "D") {
+            $aseq.= "-" x $1;
+        }  else {
+            $aseq.= substr($seq, $pos, $1); $pos+=$1
+        }
     };
     return $aseq;
 }
