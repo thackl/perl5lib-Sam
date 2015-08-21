@@ -1735,6 +1735,20 @@ sub call_variants{
     return $self;
 }
 
+=head2 variant_positions
+
+Get a list of variant positions from called variants, 0-based.
+
+=cut
+
+sub variant_positions{
+    my $self = shift;
+
+    die (((caller 0)[3]).": ->call_variants() required\n") unless @{$self->{vars}};
+
+    return grep{ @{$self->{vars}[$_]} > 1 }(0..@{$self->{vars}}-1);
+}
+
 =head2 remap
 
 experimental
