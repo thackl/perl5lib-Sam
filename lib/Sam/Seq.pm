@@ -1781,12 +1781,14 @@ sub stabilize_variants{
     my %p = (
         min_freq => 2,
         var_dist => 4,
+        sticky_dist => 2,
         @_
     );
 
     my @vpos;
     my $min_freq = $p{min_freq};
     my $var_dist = $p{var_dist};
+    my $sticky_dist = $p{sticky_dist};
 
     # call variants
     my $vars = $self->{vars};
@@ -1813,14 +1815,15 @@ sub stabilize_variants{
     push @vgroups, [@vg] if @vg >1;
 
     # get variant group substring coordinates
-    my @vranges = map{ [$_->[0], $_->[@$_-1] - $_->[0] + 1] }@vgroups;
-    # my @vranges = map{
-    #     my $o = $_->[0] > $var_dist ? $_->[0] - $var_dist : 0;
-    #     my $l = $_->[@$_-1] - $_->[0] + 1 + 2*$var_dist;
-    #     my $excess = @$vars - 1 - ($o+$l);
-    #     $l-=$excess if $excess < 0;
-    #     [$o, $l];
-    # }@vgroups;
+    #  my @vranges = map{ [$_->[0], $_->[@$_-1] - $_->[0] + 1] }@vgroups;
+    # sticky vranges
+    my @vranges = map{
+         my $o = $_->[0] > $sticky_dist ? $_->[0] - $sticky_dist : 0;
+         my $l = $_->[@$_-1] - $_->[0] + 1 + 2*$sticky_dist;
+         my $excess = @$vars - 1 - ($o+$l);
+         $l-=$excess if $excess < 0;
+         [$o, $l];
+    }@vgroups;
 
     my %vars;
     #@vars{@vpos} = map{{}}@vpos;
