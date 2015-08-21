@@ -22,6 +22,8 @@ use constant {
     # the value, the more trust is put into frequency (proovread-1.01: 50)
     PROOVREAD_CONSTANT => 120,
 
+    GAP => '', # or '-'
+
     # pacbio scoring scheme - aln2score
     # bwa (-A 5 -B 11 -O 2,1 -E 4,3)
     MA => 0, # use 0 not prevent just having the longer alignment win
@@ -399,7 +401,7 @@ sub State_matrix{
                         push @squals, split(//,substr($qua,$qpos,$cigar[$i])) if $p{qual_weighted};
                         $qpos += $cigar[$i];
                     } elsif ($cigar[$i+1] eq 'D') {
-                        push @states, ('-') x $cigar[$i];
+                        push @states, (GAP) x $cigar[$i];
                         if($p{qual_weighted}){
                             my $qbefore = $qpos > 1 ? substr($qua,$qpos-1,1) : substr($qua,$qpos,1);
                             my $qafter  = $qpos < length($qua) ? substr($qua,$qpos,1) : substr($qua,$qpos-1,1);
@@ -410,7 +412,7 @@ sub State_matrix{
                         if ($i) {
                             # append to prev state
                             #print STDERR "@cigar\n" unless @states;
-                            if ($states[$#states] eq '-') {
+                            if ($states[$#states] eq GAP) {
                                 # some mappers, e.g. bowtie2 produce 1D1I instead of
                                 # mismatchas (1M), as it is cheaper. This needs to be
                                 # corrected to a MM
@@ -533,7 +535,7 @@ sub new{
 			T => 1,
 			G => 2,
 			C => 3,
-			'-' => 4,
+			&GAP => 4,  # GAP is a constant
 			N => 5,
 			# .. complex states, dynamically added
 		}
@@ -1531,7 +1533,7 @@ sub variant_consensus{
         # TODO MaxInsertSize
         my $v = $vvars->[$i][0];
 
-        next if $v eq '-';
+        next if $v eq GAP;
 
         if (length($v) > 1) {
              $trace.= 'I' x length($v);
@@ -1902,7 +1904,7 @@ sub stabilize_variants{
         $self->{probs}[$f] = [map{$_/$cov}@{$self->{freqs}[$f]}];
 
         foreach (($f+1)..$t) {
-            $self->{vars}[$_] = ['-'];
+            $self->{vars}[$_] = [GAP];
             $self->{freqs}[$_] = [$cov];
             $self->{covs}[$_] = $cov;
         }
