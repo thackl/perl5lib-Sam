@@ -1795,11 +1795,10 @@ sub stabilize_variants{
     my %p = (
         min_freq => 2,
         var_dist => 4,
-        sticky_dist => 2,
+        sticky_dist => 1,
         @_
     );
 
-    my @vpos;
     my $min_freq = $p{min_freq};
     my $var_dist = $p{var_dist};
     my $sticky_dist = $p{sticky_dist};
@@ -1808,11 +1807,13 @@ sub stabilize_variants{
     my $vars = $self->{vars};
     my $vcigars = $self->{vcigars};
 
-    for (my $i=0; $i<@$vars; $i++) {
-        if ( @{$self->{freqs}[$i]} > 1) {
-            push @vpos, $i;
-        }
-    }
+    my @vpos = $self->variant_positions;
+
+    #for (my $i=0; $i<@$vars; $i++) {
+    #    if ( @{$self->{freqs}[$i]} > 1) {
+    #        push @vpos, $i;
+    #    }
+    #}
     return unless @vpos; # nothing to do
 
     # get close variants
@@ -1838,6 +1839,8 @@ sub stabilize_variants{
          $l-=$excess if $excess < 0;
          [$o, $l];
     }@vgroups;
+
+    $self->{var_stabilize_ranges} = \@vranges;
 
     my %vars;
     #@vars{@vpos} = map{{}}@vpos;
