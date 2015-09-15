@@ -34,7 +34,7 @@ use constant {
     QGE => -3,
 };
 
-our $VERSION = '1.5.0';
+our $VERSION = '1.5.1';
 
 
 
@@ -212,7 +212,7 @@ sub Trace2cigar{
 	my $cigar = '';
         my $spos = 0;
 
-        while($trace =~ /(\w)(?!\g{1})/g){
+        while($trace =~ /(.)(?!\g{1})/g){
             $cigar.= pos($trace)-$spos.$1;
             $spos = pos($trace);
         }
@@ -1526,14 +1526,18 @@ sub variant_consensus{
         unless ($vcovs->[$i]){
             $seq.= $self->{ref} ? substr($self->{ref}{seq}, $i, 1) : 'n';
             push @freqs, 0;
-            $trace.='0';
+            $trace.='X';
             next;
         }
 
         # TODO MaxInsertSize
         my $v = $vvars->[$i][0];
 
-        next if $v eq GAP;
+        if ($v eq GAP){
+            $trace.= 'D';
+            #push @freqs, $vcovs->[$i];
+            next;
+        }
 
         if (length($v) > 1) {
              $trace.= 'I' x length($v);
