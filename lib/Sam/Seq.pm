@@ -34,7 +34,7 @@ use constant {
     QGE => -3,
 };
 
-our $VERSION = '1.5.1';
+our $VERSION = '1.6.0';
 
 
 
@@ -1514,6 +1514,7 @@ sub variant_consensus{
     my $seq = '';
     my @freqs;
     my $trace = '';
+    my @vars_cns;
 
     my $vcovs = $self->{covs};
     my $vvars = $self->{vars};
@@ -1545,6 +1546,10 @@ sub variant_consensus{
              $trace.= substr($self->{ref}{seq}, $i, 1) eq $vvars->[$i][0] ? '=' : 'X';
         }
 
+        if ((my $vc = @{$vvars->[$i]}) > 1) { # variant posistion
+            push @vars_cns, [length($seq), length($v), $vvars->[$i], $vfreqs->[$i]];
+        }
+
         $seq.= $v;
         push @freqs, ($vcovs->[$i]) x length($v);
     }
@@ -1558,6 +1563,7 @@ sub variant_consensus{
         phred_offset => $self->{phred_offset},
         trace => $trace,
         cigar => Sam::Seq->Trace2cigar($trace),
+        variants => [@vars_cns],
     );
 }
 
