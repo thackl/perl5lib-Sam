@@ -34,7 +34,7 @@ use constant {
     QGE => -3,
 };
 
-our $VERSION = '1.6.0';
+our $VERSION = '1.6.1';
 
 
 
@@ -644,8 +644,11 @@ sub remove_aln_by_iid{
 	my $aln = delete $self->{_alns}{$id};
 	defined $aln || return;
 
-	my $bin = $self->bin($aln);
+        $aln->is(UNMAPPED) && return $aln;
+
+        my $bin = $self->bin($aln);
         my $ba = $self->{_bin_alns}[$bin];
+
         if (@$ba) {
 
             my $idx = List::Util::first {$ba->[$_] == $id} 0..@$ba-1;
