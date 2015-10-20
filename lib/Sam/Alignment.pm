@@ -41,7 +41,7 @@ Class for handling sam alignments.
   # true if read is paired and unmapped
   $aln->is(PAIRED, UNMAPPED);
   # true if reads is either duplicate or bad quality
-  $aln->is(PCR_DUPLICATE & VENDOR_FAIL);
+  $aln->is(PCR_DUPLICATE + VENDOR_FAIL);
 
 =head1 Class ATTRIBUTES
 
@@ -169,7 +169,7 @@ sub string{
 
 Test flag encoded alignment properties. Takes bitmasks, returns 1 or 0
  accordingly. For OR testing of multiple bitmasks, provide maskes as array. For
- AND testing of bitmasks combine bitmasks C<(MASK_1 & MASK_2)>. Export named
+ AND testing of bitmasks combine bitmasks C<(MASK_1 + MASK_2)>. Export named
  bitmasks with C<use Sam::Alignment ':flags'>
 
   # Property bitmasks
@@ -178,7 +178,7 @@ Test flag encoded alignment properties. Takes bitmasks, returns 1 or 0
   # true if read is paired and unmapped
   is(PAIRED, UNMAPPED);
   # true if reads is either duplicate or bad quality
-  is(DUPLICATE & BAD_QUALITY);
+  is(DUPLICATE + BAD_QUALITY);
 
   #property => bitmask value
   PAIRED =>          0x1
