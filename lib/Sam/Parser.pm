@@ -5,7 +5,7 @@ use strict;
 
 use Sam::Alignment qw(:flags);
 
-our $VERSION = '1.3.3';
+our $VERSION = '1.3.4';
 
 =head1 NAME
 
@@ -155,8 +155,7 @@ Get/Set conditions that determine which alignments are returned by the
  To explicitly deactivate testing, provide a value that evaluates to FALSE.
  For details on bitmasks see L<Sam::Alignment>.
 
-The test routine is executed with the parameters C<$parser_obj, $aln_obj>
- and for C<next_pair()> additionally with C< $aln_obj2 >.
+The test routine is called with C<$aln_obj> as first parameter.
 
   # parser returning only BAD_QUALITY alns
   my $sp = Sam::Parser->new(
