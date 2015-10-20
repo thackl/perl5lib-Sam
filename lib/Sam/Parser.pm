@@ -5,7 +5,7 @@ use strict;
 
 use Sam::Alignment qw(:flags);
 
-our $VERSION = '1.3.4';
+our $VERSION = '1.3.5';
 
 =head1 NAME
 
@@ -253,13 +253,12 @@ Loop through sam file and return next 'Sam::Alignment' object (meeting the
 =cut
 
 sub next_aln{
-	my ($self) = @_;
-	my $sam = readline($self->{fh});
-        return unless defined $sam; # eof
-
+    my ($self) = @_;
+    while (defined (my $sam = readline($self->{fh}))){ # loop until ->is is matched
         my $aln = Sam::Alignment->new($sam);
         return $aln if !$self->{_is} or &{$self->{_is}}($aln);
-	return;
+    }
+    return; # eof
 }
 
 =head2 next_seq
