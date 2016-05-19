@@ -11,7 +11,7 @@ use constant {
     GAP => '', # or '-'
 };
 
-our $VERSION = '1.1.5';
+our $VERSION = '1.1.6';
 
 =head1 NAME
 
@@ -400,7 +400,7 @@ sub full_length{
 
     my $cigar = $self->cigar;
     my $l;
-    while ($cigar =~ /(\d+)[MDHS]/g) { $l += $1; };
+    while ($cigar =~ /(\d+)[MX=DHS]/g) { $l += $1; };
 
     $self->{full_length} = $l;
     return $l;
@@ -425,7 +425,7 @@ sub length{
     my $cigar = $self->cigar;
     my $l;
     if ($self->seq eq "*" || $cigar =~ /^\d+S|S$/) { # seq NA or soft clipped
-        while ($cigar =~ /(\d+)[MD]/g) { $l += $1; };
+        while ($cigar =~ /(\d+)[MX=D]/g) { $l += $1; };
     }else {
         $l = length($self->seq);
     }
