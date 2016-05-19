@@ -11,7 +11,7 @@ use constant {
     GAP => '', # or '-'
 };
 
-our $VERSION = '1.1.6';
+our $VERSION = '1.1.7';
 
 =head1 NAME
 
@@ -435,6 +435,24 @@ sub length{
 }
 
 
+=head2 length_aligned
+
+Get length of the alignment with respect to reference (MX=I)
+
+=cut
+
+sub length_aligned{
+    my ($self) = @_;
+    return $self->{length_aligned} if defined($self->{length_aligned});
+
+    my $cigar = $self->cigar;
+    my $l;
+    while ($cigar =~ /(\d+)[MX=I]/g) { $l += $1; };
+    $self->{length_aligned} = $l;
+    return $l;
+}
+
+
 =head2 seq_aligned
 
 Get the aligned sequence, with D as gaps and I/S removed from seq. This allows
@@ -567,6 +585,7 @@ sub ncscore{
 sub _reset_cached_values{
     $_[0]->{length} = undef;
     $_[0]->{full_length} = undef;
+    $_[0]->{length_aligned} = undef;
 }
 
 =head1 Aliases
