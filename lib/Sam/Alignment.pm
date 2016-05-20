@@ -11,7 +11,7 @@ use constant {
     GAP => '', # or '-'
 };
 
-our $VERSION = '1.1.7';
+our $VERSION = '1.1.8';
 
 =head1 NAME
 
@@ -572,6 +572,16 @@ sub ncscore{
     return unless defined $nscore;
 
     return $nscore * ($self->length/(NCSCORE_CONSTANT + $self->length));
+}
+
+=head2 strand
+
+Returns '+' or '-' depending on flag.
+
+=cut
+
+sub strand{
+    return $_[0]->is(0x16) ? '-' : '+';
 }
 
 ##----------------------------------------------------------------------------##
